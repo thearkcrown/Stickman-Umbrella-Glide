@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrazyGames SDK Test</title>
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v2.js"></script>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a202c;
+            color: #fff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .log {
+            background: #000;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .info { color: #3b82f6; }
+        .warning { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CrazyGames SDK Test Page</h1>
+        <p>This page helps test the CrazyGames SDK integration locally.</p>
+
+        <div>
+            <button onclick="checkSDK()">Check SDK Status</button>
+            <button onclick="initSDK()">Initialize SDK</button>
+            <button onclick="getUser()">Get User</button>
+            <button onclick="showLogin()">Show Login</button>
+            <button onclick="gameplayStart()">Gameplay Start</button>
+            <button onclick="gameplayStop()">Gameplay Stop</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        let sdkInitialized = false;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function checkSDK() {
+            log('Checking SDK status...', 'info');
+
+            if (window.CrazyGames) {
+                log('✅ window.CrazyGames exists', 'success');
+
+                if (window.CrazyGames.SDK) {
+                    log('✅ window.CrazyGames.SDK exists', 'success');
+                    log('SDK Object: ' + JSON.stringify(Object.keys(window.CrazyGames.SDK)), 'info');
+                } else {
+                    log('❌ window.CrazyGames.SDK is missing', 'error');
+                }
+            } else {
+                log('❌ window.CrazyGames is missing', 'error');
+                log('⚠️ SDK not loaded. This is normal when running locally.', 'warning');
+                log('💡 Deploy to CrazyGames to test full functionality.', 'info');
+            }
+
+            log('Initialized: ' + sdkInitialized, 'info');
+        }
+
+        async function initSDK() {
+            if (sdkInitialized) {
+                log('SDK already initialized', 'warning');
+                return;
+            }
+
+            if (!window.CrazyGames || !window.CrazyGames.SDK) {
+                log('❌ CrazyGames SDK not available', 'error');
+                log('This is normal when running locally. Deploy to CrazyGames to test.', 'warning');
+                return;
+            }
+
+            try {
+                log('Calling sdkGameLoadingStart()...', 'info');
+                window.CrazyGames.SDK.game.sdkGameLoadingStart();
+
+                log('Calling sdkGameLoadingStop()...', 'info');
+                await window.CrazyGames.SDK.game.sdkGameLoadingStop();
+
+                sdkInitialized = true;
+                log('✅ SDK initialized successfully', 'success');
+            } catch (e) {
+                log('❌ Error: ' + e.message, 'error');
+            }
+        }
+
+        async function getUser() {
+            if (!window.CrazyGames?.SDK) {
+                log('❌ SDK not available', 'error');
+                return;
+            }
+
+            try {
+                log('Fetching user...', 'info');
+                const user = await window.CrazyGames.SDK.user.getUser();
+
+                if (user) {
+                    log('✅ User found: ' + user.username, 'success');
+                    log('Profile URL: ' + user.profilePictureUrl, 'info');
+                } else {
+                    log('ℹ️ No user logged in', 'info');
+                }
+            } catch (e) {
+                log('❌ Error: ' + e.message, 'error');
+            }
+        }
+
+        async function showLogin() {
+            if (!window.CrazyGames?.SDK) {
+                log('❌ SDK not available', 'error');
+                return;
+            }
+
+            try {
+                log('Showing login prompt...', 'info');
+                const user = await window.CrazyGames.SDK.user.showAuthPrompt();
+
+                if (user) {
+                    log('✅ Login successful: ' + user.username, 'success');
+                } else {
+                    log('ℹ️ Login cancelled', 'info');
+                }
+            } catch (e) {
+                log('❌ Error: ' + e.message, 'error');
+            }
+        }
+
+        function gameplayStart() {
+            if (!window.CrazyGames?.SDK) {
+                log('❌ SDK not available', 'error');
+                return;
+            }
+
+            try {
+                window.CrazyGames.SDK.game.gameplayStart();
+                log('✅ Called gameplayStart()', 'success');
+            } catch (e) {
+                log('❌ Error: ' + e.message, 'error');
+            }
+        }
+
+        function gameplayStop() {
+            if (!window.CrazyGames?.SDK) {
+                log('❌ SDK not available', 'error');
+                return;
+            }
+
+            try {
+                window.CrazyGames.SDK.game.gameplayStop();
+                log('✅ Called gameplayStop()', 'success');
+            } catch (e) {
+                log('❌ Error: ' + e.message, 'error');
+            }
+        }
+
+        // Auto-check on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                log('=== CrazyGames SDK Test Page Loaded ===', 'info');
+                checkSDK();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

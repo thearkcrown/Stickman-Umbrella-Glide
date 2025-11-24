@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+*.log
+
+# Allow MP3 files in public folder
+!public/*.mp3
+.claude

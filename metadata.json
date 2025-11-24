@@ -1,0 +1,5 @@
+{
+  "name": "Stickman Umbrella Glide",
+  "description": "A physics-based survival game where you control a falling stickman. Open your umbrella to glide and slow down, close it to dive. Avoid obstacles and listen to the AI roast your skills.",
+  "requestFramePermissions": []
+}
