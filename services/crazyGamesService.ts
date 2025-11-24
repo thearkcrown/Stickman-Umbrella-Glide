@@ -75,8 +75,6 @@ export const initCrazyGames = async (): Promise<boolean> => {
   // Start new initialization
   initializationPromise = (async () => {
     try {
-      console.log('Waiting for CrazyGames SDK...');
-
       // Wait for SDK to be available
       const sdkAvailable = await waitForSDK();
 
@@ -85,22 +83,17 @@ export const initCrazyGames = async (): Promise<boolean> => {
         return false;
       }
 
-      console.log('CrazyGames SDK detected, initializing...');
-
       // Call sdkGameLoadingStart to notify SDK that game is loading
       try {
         window.CrazyGames.SDK.game.sdkGameLoadingStart();
-        console.log('Called sdkGameLoadingStart()');
       } catch (e) {
         console.warn('Error calling sdkGameLoadingStart:', e);
       }
 
       // Signal that game loading has completed
       await window.CrazyGames.SDK.game.sdkGameLoadingStop();
-      console.log('Called sdkGameLoadingStop()');
 
       sdkInitialized = true;
-      console.log('✅ CrazyGames SDK Initialized Successfully');
       return true;
 
     } catch (e) {
@@ -130,14 +123,11 @@ export const crazyGamesLogin = async (): Promise<CrazyGamesUser | null> => {
   }
 
   try {
-    console.log('Showing CrazyGames auth prompt...');
     const user = await window.CrazyGames.SDK.user.showAuthPrompt();
 
     if (user) {
-      console.log('✅ User logged in successfully:', user.username);
       return user;
     } else {
-      console.log('User cancelled login or login failed');
       return null;
     }
   } catch (e: any) {
@@ -154,7 +144,6 @@ export const crazyGamesLogin = async (): Promise<CrazyGamesUser | null> => {
 
 export const getCrazyGamesUser = async (): Promise<CrazyGamesUser | null> => {
   if (!sdkInitialized) {
-    console.log('SDK not initialized yet, cannot fetch user');
     return null;
   }
 
@@ -167,27 +156,22 @@ export const getCrazyGamesUser = async (): Promise<CrazyGamesUser | null> => {
     const user = await window.CrazyGames.SDK.user.getUser();
 
     if (user) {
-      console.log('✅ Retrieved logged-in user:', user.username);
       return user;
     } else {
-      console.log('No user currently logged in');
       return null;
     }
   } catch (e: any) {
-    console.log('User not logged in or error fetching user:', e?.message || e);
     return null;
   }
 };
 
 export const reportGameplayStart = () => {
   if (!sdkInitialized || !window.CrazyGames?.SDK) {
-    console.log('SDK not available, skipping gameplayStart()');
     return;
   }
 
   try {
     window.CrazyGames.SDK.game.gameplayStart();
-    console.log('📊 Reported gameplay start to CrazyGames');
   } catch (e) {
     console.error('Error reporting gameplay start:', e);
   }
@@ -195,13 +179,11 @@ export const reportGameplayStart = () => {
 
 export const reportGameplayStop = () => {
   if (!sdkInitialized || !window.CrazyGames?.SDK) {
-    console.log('SDK not available, skipping gameplayStop()');
     return;
   }
 
   try {
     window.CrazyGames.SDK.game.gameplayStop();
-    console.log('📊 Reported gameplay stop to CrazyGames');
   } catch (e) {
     console.error('Error reporting gameplay stop:', e);
   }
@@ -209,13 +191,11 @@ export const reportGameplayStop = () => {
 
 export const triggerHappyTime = () => {
   if (!sdkInitialized || !window.CrazyGames?.SDK) {
-    console.log('SDK not available, skipping happytime()');
     return;
   }
 
   try {
     window.CrazyGames.SDK.game.happytime();
-    console.log('🎉 Triggered happytime on CrazyGames');
   } catch (e) {
     console.error('Error triggering happytime:', e);
   }

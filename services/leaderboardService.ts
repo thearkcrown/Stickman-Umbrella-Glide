@@ -58,10 +58,8 @@ export const submitScore = async (name: string, score: number, userId?: string):
             score: score,
             date: serverTimestamp()
           });
-          console.log(`✅ Updated high score for user ${userId}: ${existingData.score} → ${score}`);
           return { success: true };
         } else {
-          console.log(`ℹ️ Score ${score} not higher than existing score ${existingData.score}. Not updating.`);
           return { success: true }; // Still return success, just didn't update
         }
       }
@@ -74,7 +72,6 @@ export const submitScore = async (name: string, score: number, userId?: string):
       score: score,
       date: serverTimestamp()
     });
-    console.log(`✅ Created new leaderboard entry for ${name}: ${score}`);
     return { success: true };
   } catch (error: any) {
     console.error("Error submitting score:", error);

@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Leaderboard Collection Rules
+    match /leaderboard/{entry} {
+
+      // Allow anyone to read the leaderboard (public scores)
+      allow read: if true;
+
+      // Allow creating new leaderboard entries with validation
+      allow create: if
+        // Must be authenticated or have a valid request
+        request.auth != null || request.resource.data.userId != null
+        // Validate data structure
+        && request.resource.data.keys().hasAll(['name', 'score', 'date'])
+        // Validate data types
+        && request.resource.data.name is string
+        && request.resource.data.score is number
+        && request.resource.data.date is timestamp
+        // Name must be between 1-15 characters
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 15
+        // Score must be positive and reasonable (max 100,000m)
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 100000
+        // userId must be a string if present
+        && (request.resource.data.userId == null || request.resource.data.userId is string);
+
+      // Allow updating only if:
+      // 1. The userId matches the existing document's userId (user updating their own score)
+      // 2. The new score is higher than the old score
+      // 3. Only name, score, and date fields are updated
+      allow update: if
+        // Must match the userId or be authenticated with matching ID
+        (request.auth != null && request.auth.uid == resource.data.userId)
+        || (request.resource.data.userId != null && request.resource.data.userId == resource.data.userId)
+        // New score must be higher than old score
+        && request.resource.data.score > resource.data.score
+        // Validate updated data structure
+        && request.resource.data.keys().hasAll(['name', 'score', 'date'])
+        // Validate data types
+        && request.resource.data.name is string
+        && request.resource.data.score is number
+        && request.resource.data.date is timestamp
+        // Name must be between 1-15 characters
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 15
+        // Score must be positive and reasonable
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 100000;
+
+      // Deny delete operations (preserve leaderboard history)
+      allow delete: if false;
+    }
+
+    // Deny access to all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

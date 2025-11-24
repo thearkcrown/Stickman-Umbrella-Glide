@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import GameCanvas from './components/GameCanvas';
-import { GameState, LeaderboardEntry, CosmeticItem, PlayerCosmetics } from './types';
+import HomeStickman from './components/HomeStickman';
+import { GameState, LeaderboardEntry, CosmeticItem, PlayerCosmetics, GameMode, ChallengeLevel, LevelProgress } from './types';
 import { getGameOverRoast } from './services/geminiService';
 import { getLeaderboard, submitScore, isHighScore } from './services/leaderboardService';
+import { getOrCreatePlayerName, generateShortUniqueName } from './services/nameGenerator';
+import { CHALLENGE_LEVELS, initializeLevelObjectives } from './services/challengeLevels';
 import {
   initCrazyGames,
   getCrazyGamesUser,
@@ -27,6 +30,7 @@ const createNoiseBuffer = (ctx: AudioContext, duration: number = 2) => {
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
+  const [isPaused, setIsPaused] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [roast, setRoast] = useState<string>('');
@@ -90,17 +94,36 @@ const App: React.FC = () => {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [showNameInput, setShowNameInput] = useState(false);
   const [playerName, setPlayerName] = useState(() => {
-    const stored = localStorage.getItem('playerName');
-    return stored || '';
+    // Always use auto-generated unique name
+    return getOrCreatePlayerName();
   });
   const [submittingScore, setSubmittingScore] = useState(false);
   const [scoreSubmitted, setScoreSubmitted] = useState(false);
-  const [editingName, setEditingName] = useState(false);
-  const [editingNameGameOver, setEditingNameGameOver] = useState(false);
 
   // CrazyGames State
   const [crazyUser, setCrazyUser] = useState<CrazyGamesUser | null>(null);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
+
+  // Difficulty Mode State
+  const [difficultyMode, setDifficultyMode] = useState<'EASY' | 'MEDIUM' | 'HARD'>(() => {
+    const stored = localStorage.getItem('difficultyMode');
+    return (stored as 'EASY' | 'MEDIUM' | 'HARD') || 'MEDIUM';
+  });
+
+  // Dark Mode State
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const stored = localStorage.getItem('darkMode');
+    return stored === 'true';
+  });
+
+  // Game Mode State
+  const [gameMode, setGameMode] = useState<GameMode>(() => {
+    const stored = localStorage.getItem('gameMode');
+    return (stored as GameMode) || 'ENDLESS';
+  });
+  const [selectedChallengeLevel, setSelectedChallengeLevel] = useState<number | null>(null);
+  const [showChallengeLevels, setShowChallengeLevels] = useState(false);
+  const [levelProgress, setLevelProgress] = useState<LevelProgress | null>(null);
 
   // Audio State
   const [masterVolume, setMasterVolume] = useState(() => {
@@ -143,7 +166,6 @@ const App: React.FC = () => {
     if (!userId) {
       userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       localStorage.setItem('stickman_user_id', userId);
-      console.log('🆔 Created new user ID:', userId);
     }
     return userId;
   }, []);
@@ -160,29 +182,16 @@ const App: React.FC = () => {
 
     // Initialize CrazyGames SDK
     const setupCrazyGames = async () => {
-      console.log('🎮 Starting CrazyGames SDK setup...');
-
       const initialized = await initCrazyGames();
 
       if (initialized) {
-        console.log('✅ CrazyGames SDK initialized, checking for logged-in user...');
-
         const user = await getCrazyGamesUser();
 
         if (user) {
           setCrazyUser(user);
-          setPlayerName(user.username);
-          localStorage.setItem('playerName', user.username);
-          console.log('✅ User auto-logged in:', user.username);
-        } else {
-          console.log('ℹ️ No user logged in yet');
+          // Keep auto-generated name, don't override with CrazyGames username
         }
-      } else {
-        console.log('⚠️ CrazyGames SDK not available (running locally or SDK failed to load)');
       }
-
-      // Log SDK status for debugging
-      console.log('SDK Status:', getCrazyGamesSDKStatus());
     };
 
     setupCrazyGames();
@@ -208,8 +217,6 @@ const App: React.FC = () => {
     const musicGain = musicGainRef.current;
     if (!ctx || !musicGain) return;
 
-    console.log('🎶 Starting background music...');
-
     // Stop existing music if playing
     if (backgroundMusicRef.current) {
       backgroundMusicRef.current.pause();
@@ -233,12 +240,8 @@ const App: React.FC = () => {
 
     // Play music
     audio.play()
-      .then(() => {
-        console.log('✅ Background music started');
-      })
       .catch((error) => {
         console.error('❌ Failed to play background music:', error);
-        console.log('💡 User interaction may be required to start audio');
       });
   }, [currentMusicTrack]);
 
@@ -246,7 +249,6 @@ const App: React.FC = () => {
     if (backgroundMusicRef.current) {
       backgroundMusicRef.current.pause();
       backgroundMusicRef.current.currentTime = 0;
-      console.log('🎵 Background music stopped');
     }
   }, []);
 
@@ -257,8 +259,6 @@ const App: React.FC = () => {
 
     setCurrentMusicTrack(nextTrack);
     localStorage.setItem('musicTrack', nextTrack);
-
-    console.log('🎵 Switching to:', nextTrack);
 
     // Restart music with new track
     if (backgroundMusicRef.current && audioCtxRef.current) {
@@ -273,8 +273,6 @@ const App: React.FC = () => {
     const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
     const ctx = new AudioContext();
     audioCtxRef.current = ctx;
-
-    console.log('🎵 Initializing audio system...');
 
     // Create Master Gain Node (controls everything)
     const masterGain = ctx.createGain();
@@ -339,8 +337,6 @@ const App: React.FC = () => {
 
     // Start background music
     startBackgroundMusic();
-
-    console.log('✅ Audio system initialized');
   };
 
   // Audio Logic: Wind Control (Gliding)
@@ -526,6 +522,21 @@ const App: React.FC = () => {
     localStorage.setItem('selectedCosmetics', JSON.stringify(selectedCosmetics));
   }, [selectedCosmetics]);
 
+  // Save difficulty mode to localStorage
+  useEffect(() => {
+    localStorage.setItem('difficultyMode', difficultyMode);
+  }, [difficultyMode]);
+
+  // Save dark mode to localStorage
+  useEffect(() => {
+    localStorage.setItem('darkMode', isDarkMode.toString());
+  }, [isDarkMode]);
+
+  // Save game mode to localStorage
+  useEffect(() => {
+    localStorage.setItem('gameMode', gameMode);
+  }, [gameMode]);
+
   const handleCoinCollect = useCallback((amount: number) => {
     setCoins(prev => prev + amount);
   }, []);
@@ -571,22 +582,65 @@ const App: React.FC = () => {
   };
 
   const handleStart = () => {
+    // For Challenge mode, require level selection
+    if (gameMode === 'CHALLENGE' && selectedChallengeLevel === null) {
+      setShowChallengeLevels(true);
+      return;
+    }
+
     initAudio();
     if (audioCtxRef.current?.state === 'suspended') {
         audioCtxRef.current.resume();
+    }
+
+    // Initialize level progress for Challenge mode
+    if (gameMode === 'CHALLENGE' && selectedChallengeLevel !== null) {
+      const objectives = initializeLevelObjectives(selectedChallengeLevel);
+      setLevelProgress({
+        objectives,
+        startTime: Date.now(),
+        timeElapsed: 0
+      });
+    } else {
+      setLevelProgress(null);
     }
 
     // CrazyGames
     reportGameplayStart();
 
     setGameState(GameState.PLAYING);
+    setIsPaused(false);
     setScore(0);
     prevScoreRef.current = 0;
     setScorePulse(false);
     setShowNameInput(false);
     setScoreSubmitted(false);
-    setEditingNameGameOver(false); // Reset game over name editor
     // Don't clear roast/snapshot here to allow smooth fade out of Game Over screen
+  };
+
+  const handleSelectGameMode = (mode: GameMode) => {
+    setGameMode(mode);
+    if (mode !== 'CHALLENGE') {
+      setSelectedChallengeLevel(null);
+      setShowChallengeLevels(false);
+    }
+  };
+
+  const handleSelectChallengeLevel = (levelId: number) => {
+    setSelectedChallengeLevel(levelId);
+    setShowChallengeLevels(false);
+  };
+
+  const handlePause = () => {
+    setIsPaused(true);
+  };
+
+  const handleResume = () => {
+    setIsPaused(false);
+    // Resume audio context if suspended
+    if (audioCtxRef.current?.state === 'suspended') {
+      audioCtxRef.current.resume();
+    }
   };
 
   // Memoized to prevent GameCanvas loop restart jitter
@@ -689,39 +743,22 @@ const App: React.FC = () => {
   };
 
   const handleCrazyGamesLogin = async () => {
-    console.log('User clicked CrazyGames login button');
-
     try {
       const user = await crazyGamesLogin();
 
       if (user) {
         setCrazyUser(user);
-        setPlayerName(user.username);
-        localStorage.setItem('playerName', user.username);
-        console.log('Login successful, username:', user.username);
-      } else {
-        console.log('Login was cancelled or failed');
-        // Optionally show a user-friendly message
+        // Keep auto-generated name, don't override
       }
     } catch (error) {
       console.error('Unexpected error during login:', error);
     }
   };
 
-  const handleNameSave = () => {
-    if (playerName.trim()) {
-      localStorage.setItem('playerName', playerName.trim());
-      setEditingName(false);
-      console.log('💾 Player name saved:', playerName.trim());
-    }
-  };
-
-  const handleNameSaveGameOver = () => {
-    if (playerName.trim()) {
-      localStorage.setItem('playerName', playerName.trim());
-      setEditingNameGameOver(false);
-      console.log('💾 Player name saved (Game Over):', playerName.trim());
-    }
+  const handleRegenerateName = () => {
+    const newName = generateShortUniqueName();
+    setPlayerName(newName);
+    localStorage.setItem('playerName', newName);
   };
 
   const handleGoHome = () => {
@@ -730,7 +767,6 @@ const App: React.FC = () => {
     setCrashSnapshot(null);
     setShowNameInput(false);
     setScoreSubmitted(false);
-    setEditingNameGameOver(false); // Reset game over name editor
     loadLeaderboard(); // Refresh leaderboard when returning home
   };
 
@@ -742,17 +778,24 @@ const App: React.FC = () => {
       {/* Game Layer */}
       <GameCanvas
         gameState={gameState}
+        isPaused={isPaused}
         onScoreUpdate={handleScoreUpdate}
         onGameOver={handleGameOver}
         onCoinCollect={handleCoinCollect}
         playerCosmetics={selectedCosmetics}
+        difficultyMode={difficultyMode}
+        isDarkMode={isDarkMode}
+        gameMode={gameMode}
+        selectedChallengeLevel={selectedChallengeLevel}
+        levelProgress={levelProgress}
+        onLevelProgressUpdate={setLevelProgress}
         playCrashSound={playCrashSound}
         playOpenSound={playOpenSound}
         playCloseSound={playCloseSound}
       />
 
       {/* HUD */}
-      <div className={`absolute top-0 left-0 w-full p-6 flex justify-between pointer-events-none z-20 transition-opacity duration-500 ${gameState === GameState.PLAYING ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`absolute top-0 left-0 w-full p-6 flex justify-between items-start pointer-events-none z-20 transition-opacity duration-500 ${gameState === GameState.PLAYING && !isPaused ? 'opacity-100' : 'opacity-0'}`}>
           <div className="flex flex-col gap-4">
              <div>
                <span className="text-gray-400 text-sm font-bold tracking-wider shadow-black drop-shadow-sm">DEPTH</span>
@@ -767,19 +810,40 @@ const App: React.FC = () => {
                </div>
              </div>
           </div>
-          <div className="flex flex-col items-end">
-             <span className="text-gray-400 text-sm font-bold tracking-wider shadow-black drop-shadow-sm">RECORD</span>
-             <span className="text-xl font-bold text-yellow-400 drop-shadow-md tabular-nums">{highScore}m</span>
-             {crazyUser && (
-                <span className="text-xs text-blue-300 mt-1 font-bold">Logged in as: {crazyUser.username}</span>
-             )}
+          <div className="flex flex-col items-end gap-3">
+             <div className="flex gap-2">
+               <button
+                 onClick={handlePause}
+                 className="pointer-events-auto bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white font-bold px-4 py-2 rounded-lg border border-white/20 transition-all hover:scale-105 flex items-center gap-2"
+               >
+                 <span className="text-xl">⏸️</span>
+                 <span className="text-sm">PAUSE</span>
+               </button>
+               <button
+                 onClick={() => setIsDarkMode(!isDarkMode)}
+                 className="pointer-events-auto bg-black/60 hover:bg-black/80 backdrop-blur-sm text-white font-bold px-3 py-2 rounded-lg border border-white/20 transition-all hover:scale-105"
+                 title={isDarkMode ? 'Switch to Day Mode' : 'Switch to Night Mode'}
+               >
+                 <span className="text-xl">{isDarkMode ? '☀️' : '🌙'}</span>
+               </button>
+             </div>
+             <div className="text-right">
+               <span className="text-gray-400 text-sm font-bold tracking-wider shadow-black drop-shadow-sm">RECORD</span>
+               <div className="text-xl font-bold text-yellow-400 drop-shadow-md tabular-nums">{highScore}m</div>
+               {crazyUser && (
+                  <span className="text-xs text-blue-300 mt-1 font-bold block">Logged in as: {crazyUser.username}</span>
+               )}
+             </div>
           </div>
       </div>
 
       {/* Start Screen */}
       <div className={`absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-30 transition-all duration-700 ${gameState === GameState.START ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          {/* Animated Falling Stickman */}
+          {gameState === GameState.START && <HomeStickman />}
+
           <div className="flex flex-col md:flex-row gap-8 items-center max-w-4xl w-full p-4">
-              
+
               {/* Left Column: Title & Play */}
               <div className="text-center md:text-left flex-1">
                 <h1 className="text-6xl font-black mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 transform -rotate-2 animate-float">
@@ -827,47 +891,132 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Player Name Editor - Available for everyone */}
+                    {/* Player Name Display with Regenerate */}
                     <div className="mt-3 pt-3 border-t border-white/10">
-                        {!editingName ? (
-                            <div className="flex items-center justify-center gap-2">
-                                <span className="text-xs text-gray-400">
-                                    {playerName ? `Name: ${playerName}` : 'No name set'}
-                                </span>
-                                <button
-                                    onClick={() => setEditingName(true)}
-                                    className="text-xs font-bold text-blue-300 hover:text-white underline decoration-blue-500/50 underline-offset-4"
-                                >
-                                    {playerName ? 'Change Name' : 'Set Name'}
-                                </button>
+                        <div className="flex flex-col items-center gap-2">
+                            <div className="text-center">
+                                <div className="text-xs text-gray-400 mb-1">Your Unique Name</div>
+                                <div className="text-sm font-bold text-blue-300 bg-black/40 px-3 py-1.5 rounded border border-blue-400/30">
+                                    {playerName}
+                                </div>
                             </div>
-                        ) : (
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    placeholder="Enter your name"
-                                    maxLength={10}
-                                    value={playerName}
-                                    onChange={(e) => setPlayerName(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleNameSave()}
-                                    className="flex-1 bg-black/40 text-white px-3 py-1.5 rounded text-xs font-bold tracking-wider outline-none border border-white/20 focus:border-blue-400 placeholder-gray-600"
-                                    autoFocus
-                                />
-                                <button
-                                    onClick={handleNameSave}
-                                    className="bg-blue-500 hover:bg-blue-400 text-white font-bold px-3 py-1.5 rounded text-xs"
-                                >
-                                    Save
-                                </button>
-                                <button
-                                    onClick={() => setEditingName(false)}
-                                    className="bg-gray-600 hover:bg-gray-500 text-white font-bold px-3 py-1.5 rounded text-xs"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        )}
+                            <button
+                                onClick={handleRegenerateName}
+                                className="text-xs font-bold text-yellow-300 hover:text-yellow-100 underline decoration-yellow-500/50 underline-offset-4 flex items-center gap-1"
+                            >
+                                <span>🎲</span>
+                                <span>Generate New Name</span>
+                            </button>
+                        </div>
                     </div>
+
+                    {/* Game Mode Selector */}
+                    <div className="mt-3 pt-3 border-t border-white/10 pointer-events-auto">
+                        <div className="text-xs text-gray-400 uppercase tracking-widest mb-3 text-center">
+                            Game Mode
+                        </div>
+                        <div className="space-y-2">
+                            <button
+                                onClick={() => handleSelectGameMode('ENDLESS')}
+                                className={`w-full py-3 px-4 rounded-lg text-left transition-all ${
+                                    gameMode === 'ENDLESS'
+                                        ? 'bg-blue-500 text-white scale-105 shadow-lg shadow-blue-500/50'
+                                        : 'bg-black/40 text-gray-300 hover:bg-black/60 border border-white/20'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl">🎯</span>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-sm">Endless Mode</div>
+                                        <div className="text-xs opacity-80">Survive as long as possible</div>
+                                    </div>
+                                </div>
+                            </button>
+
+                            <button
+                                onClick={() => handleSelectGameMode('STORM')}
+                                className={`w-full py-3 px-4 rounded-lg text-left transition-all ${
+                                    gameMode === 'STORM'
+                                        ? 'bg-purple-500 text-white scale-105 shadow-lg shadow-purple-500/50'
+                                        : 'bg-black/40 text-gray-300 hover:bg-black/60 border border-white/20'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl">🌀</span>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-sm">Storm Mode</div>
+                                        <div className="text-xs opacity-80">Hardcore · 3x Score · Free Shield</div>
+                                    </div>
+                                </div>
+                            </button>
+
+                            <button
+                                onClick={() => gameMode === 'CHALLENGE' ? setShowChallengeLevels(true) : handleSelectGameMode('CHALLENGE')}
+                                className={`w-full py-3 px-4 rounded-lg text-left transition-all ${
+                                    gameMode === 'CHALLENGE'
+                                        ? 'bg-yellow-500 text-black scale-105 shadow-lg shadow-yellow-500/50'
+                                        : 'bg-black/40 text-gray-300 hover:bg-black/60 border border-white/20'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xl">🪂</span>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-sm">Challenge Levels</div>
+                                        <div className="text-xs opacity-80">
+                                            {selectedChallengeLevel
+                                                ? `Level ${selectedChallengeLevel} Selected`
+                                                : '5 Handcrafted Missions'
+                                            }
+                                        </div>
+                                    </div>
+                                    {gameMode === 'CHALLENGE' && (
+                                        <span className="text-sm">▶</span>
+                                    )}
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Difficulty Selector - Only show for Endless and Storm modes */}
+                    {gameMode !== 'CHALLENGE' && (
+                    <div className="mt-3 pt-3 border-t border-white/10 pointer-events-auto">
+                        <div className="text-xs text-gray-400 uppercase tracking-widest mb-2 text-center">
+                            Difficulty
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setDifficultyMode('EASY')}
+                                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                                    difficultyMode === 'EASY'
+                                        ? 'bg-green-500 text-white scale-105'
+                                        : 'bg-black/40 text-gray-400 hover:bg-black/60 border border-white/20'
+                                }`}
+                            >
+                                😊 EASY
+                            </button>
+                            <button
+                                onClick={() => setDifficultyMode('MEDIUM')}
+                                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                                    difficultyMode === 'MEDIUM'
+                                        ? 'bg-yellow-500 text-black scale-105'
+                                        : 'bg-black/40 text-gray-400 hover:bg-black/60 border border-white/20'
+                                }`}
+                            >
+                                😐 MEDIUM
+                            </button>
+                            <button
+                                onClick={() => setDifficultyMode('HARD')}
+                                className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                                    difficultyMode === 'HARD'
+                                        ? 'bg-red-500 text-white scale-105'
+                                        : 'bg-black/40 text-gray-400 hover:bg-black/60 border border-white/20'
+                                }`}
+                            >
+                                😈 HARD
+                            </button>
+                        </div>
+                    </div>
+                    )}
                 </div>
               </div>
 
@@ -1133,6 +1282,104 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {/* Challenge Levels Selection Modal */}
+      <div className={`absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-md z-50 transition-all duration-300 ${showChallengeLevels ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 border-2 border-yellow-400/30 rounded-3xl p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+          {/* Header */}
+          <div className="flex justify-between items-center mb-6 pb-4 border-b border-white/10">
+            <div>
+              <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">CHALLENGE LEVELS</h2>
+              <p className="text-sm text-gray-400 mt-1">Complete objectives to win!</p>
+            </div>
+            <button
+              onClick={() => setShowChallengeLevels(false)}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-400 transition-colors"
+            >
+              <span className="text-white text-xl font-bold">×</span>
+            </button>
+          </div>
+
+          {/* Levels Grid */}
+          <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+            {CHALLENGE_LEVELS.map(level => (
+              <button
+                key={level.id}
+                onClick={() => handleSelectChallengeLevel(level.id)}
+                className={`w-full p-4 rounded-xl text-left transition-all ${
+                  selectedChallengeLevel === level.id
+                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-black scale-105 shadow-lg shadow-yellow-500/50'
+                    : 'bg-black/40 hover:bg-black/60 border border-white/20 text-white hover:border-yellow-400/50'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className="text-3xl">{
+                    level.theme === 'GENTLE' ? '🌤️' :
+                    level.theme === 'NIGHT' ? '🌙' :
+                    level.theme === 'THUNDER' ? '⚡' :
+                    level.theme === 'TORNADO' ? '🌪️' :
+                    '🚀'
+                  }</div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                        selectedChallengeLevel === level.id ? 'bg-black/30 text-white' : 'bg-yellow-500/20 text-yellow-400'
+                      }`}>
+                        LEVEL {level.id}
+                      </span>
+                      <h3 className="font-bold text-lg">{level.name}</h3>
+                    </div>
+                    <p className={`text-sm mb-3 ${selectedChallengeLevel === level.id ? 'text-black/80' : 'text-gray-400'}`}>
+                      {level.description}
+                    </p>
+                    <div className="space-y-1">
+                      <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${
+                        selectedChallengeLevel === level.id ? 'text-black/70' : 'text-gray-500'
+                      }`}>
+                        Objectives:
+                      </div>
+                      {level.objectives.map((obj, idx) => (
+                        <div key={idx} className={`text-xs flex items-start gap-2 ${
+                          selectedChallengeLevel === level.id ? 'text-black/90' : 'text-gray-300'
+                        }`}>
+                          <span>•</span>
+                          <span>{obj.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {selectedChallengeLevel === level.id && (
+                    <div className="text-2xl">✓</div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
+            <p className="text-xs text-gray-400">
+              {selectedChallengeLevel ? 'Level selected! Click START to begin' : 'Select a level to continue'}
+            </p>
+            <button
+              onClick={() => {
+                setShowChallengeLevels(false);
+                if (selectedChallengeLevel) {
+                  handleStart();
+                }
+              }}
+              disabled={!selectedChallengeLevel}
+              className={`px-6 py-2 rounded-lg font-bold ${
+                selectedChallengeLevel
+                  ? 'bg-green-500 hover:bg-green-400 text-white'
+                  : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              START LEVEL
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Game Over Screen */}
       <div className={`absolute inset-0 flex items-center justify-center bg-red-900/90 backdrop-blur-md z-40 transition-all duration-700 ${gameState === GameState.GAME_OVER ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
           <div className="bg-black/50 p-6 rounded-3xl border border-white/10 shadow-2xl max-w-sm w-full text-center relative overflow-hidden">
@@ -1206,46 +1453,23 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* Player Name Editor - Game Over Screen */}
+            {/* Player Name Display - Game Over Screen */}
             <div className="mb-4 bg-white/5 rounded-xl p-3 border border-white/10">
-              {!editingNameGameOver ? (
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-xs text-gray-300">
-                    {playerName ? `Playing as: ${playerName}` : 'No name set'}
-                  </span>
-                  <button
-                    onClick={() => setEditingNameGameOver(true)}
-                    className="text-xs font-bold text-blue-300 hover:text-white underline decoration-blue-500/50 underline-offset-4"
-                  >
-                    {playerName ? 'Change' : 'Set Name'}
-                  </button>
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-center">
+                  <div className="text-xs text-gray-400 mb-1">Your Unique Name</div>
+                  <div className="text-sm font-bold text-blue-300 bg-black/40 px-3 py-1.5 rounded border border-blue-400/30">
+                    {playerName}
+                  </div>
                 </div>
-              ) : (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Enter your name"
-                    maxLength={10}
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleNameSaveGameOver()}
-                    className="flex-1 bg-black/40 text-white px-3 py-1.5 rounded text-xs font-bold tracking-wider outline-none border border-white/20 focus:border-blue-400 placeholder-gray-600"
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleNameSaveGameOver}
-                    className="bg-blue-500 hover:bg-blue-400 text-white font-bold px-3 py-1.5 rounded text-xs"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => setEditingNameGameOver(false)}
-                    className="bg-gray-600 hover:bg-gray-500 text-white font-bold px-3 py-1.5 rounded text-xs"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+                <button
+                  onClick={handleRegenerateName}
+                  className="text-xs font-bold text-yellow-300 hover:text-yellow-100 underline decoration-yellow-500/50 underline-offset-4 flex items-center gap-1"
+                >
+                  <span>🎲</span>
+                  <span>Generate New Name</span>
+                </button>
+              </div>
             </div>
 
             {/* Action Buttons */}
@@ -1283,8 +1507,57 @@ const App: React.FC = () => {
           </div>
       </div>
 
+      {/* Pause Screen */}
+      <div className={`absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-md z-40 transition-all duration-300 ${gameState === GameState.PLAYING && isPaused ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          <div className="bg-gradient-to-br from-gray-900 to-gray-800 p-8 rounded-3xl border-2 border-blue-400/30 shadow-2xl max-w-md w-full text-center">
+            <h2 className="text-5xl font-black text-white mb-2 uppercase tracking-widest">Paused</h2>
+            <div className="text-6xl mb-6">⏸️</div>
+
+            <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-400 text-sm">Current Depth</span>
+                <span className="text-white font-bold text-xl">{score}m</span>
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-400 text-sm">Coins Collected</span>
+                <span className="text-yellow-400 font-bold text-xl">💰 {coins}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400 text-sm">Difficulty</span>
+                <span className={`font-bold text-sm ${difficultyMode === 'EASY' ? 'text-green-400' : difficultyMode === 'MEDIUM' ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {difficultyMode === 'EASY' ? '😊 EASY' : difficultyMode === 'MEDIUM' ? '😐 MEDIUM' : '😈 HARD'}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={handleResume}
+                className="w-full py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold text-lg rounded-xl hover:scale-[1.02] transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <span className="text-2xl">▶️</span>
+                <span>Resume Game</span>
+              </button>
+
+              <button
+                onClick={handleStart}
+                className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold text-base rounded-xl hover:scale-[1.02] transition-all"
+              >
+                🔄 Restart
+              </button>
+
+              <button
+                onClick={handleGoHome}
+                className="w-full py-3 bg-gray-800 hover:bg-gray-700 text-white font-bold text-base rounded-xl hover:scale-[1.02] transition-all border border-white/10"
+              >
+                🏠 Go Home
+              </button>
+            </div>
+          </div>
+      </div>
+
       {/* Tutorial / Controls Hint */}
-      <div className={`absolute bottom-10 left-0 w-full text-center pointer-events-none z-20 transition-opacity duration-500 ${gameState === GameState.PLAYING && score < 50 ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`absolute bottom-10 left-0 w-full text-center pointer-events-none z-20 transition-opacity duration-500 ${gameState === GameState.PLAYING && !isPaused && score < 50 ? 'opacity-100' : 'opacity-0'}`}>
          <div className="animate-bounce">
             <p className="text-white/50 text-sm font-medium">Hold to Glide • Release to Dive</p>
          </div>
@@ -1411,12 +1684,7 @@ const App: React.FC = () => {
             </button>
           </div>
         )}
-        <button
-          onClick={() => setShowDebugPanel(!showDebugPanel)}
-          className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-xs"
-        >
-          {showDebugPanel ? 'Hide' : 'Debug'}
-        </button>
+      
       </div>
 
     </div>

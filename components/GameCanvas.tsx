@@ -1,13 +1,20 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { GameState, Obstacle, Particle, BackgroundElement, WindZone, PowerUp, ActivePowerUp, Coin, PlayerCosmetics } from '../types';
+import { GameState, Obstacle, Particle, BackgroundElement, WindZone, PowerUp, ActivePowerUp, Coin, PlayerCosmetics, GameMode, LevelProgress } from '../types';
+import { CHALLENGE_LEVELS } from '../services/challengeLevels';
 
 interface GameCanvasProps {
   gameState: GameState;
+  isPaused: boolean;
   onScoreUpdate: (score: number) => void;
   onGameOver: (score: number, cause: string, snapshot: string) => void;
   onCoinCollect?: (amount: number) => void;
   playerCosmetics: PlayerCosmetics;
   difficultyMode: 'EASY' | 'MEDIUM' | 'HARD';
+  isDarkMode: boolean;
+  gameMode: GameMode;
+  selectedChallengeLevel: number | null;
+  levelProgress: LevelProgress | null;
+  onLevelProgressUpdate: (progress: LevelProgress | null) => void;
   playCrashSound?: () => void;
   playOpenSound?: () => void;
   playCloseSound?: () => void;
@@ -21,11 +28,17 @@ const WORLD_SPEED_MULTIPLIER_MAX = 2.0; // At max difficulty, world is 2x faster
 
 const GameCanvas: React.FC<GameCanvasProps> = ({
   gameState,
+  isPaused,
   onScoreUpdate,
   onGameOver,
   onCoinCollect,
   playerCosmetics,
   difficultyMode,
+  isDarkMode,
+  gameMode,
+  selectedChallengeLevel,
+  levelProgress,
+  onLevelProgressUpdate,
   playCrashSound,
   playOpenSound,
   playCloseSound
@@ -53,7 +66,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     isSpinning: false,
     spinRotation: 0,
     umbrellaIsBroken: false,
-    brokenTimer: 0
+    brokenTimer: 0,
+    // Umbrella bounce effect
+    umbrellaBounce: 1.0,
+    bounceTimer: 0
   });
   
   const windGustRef = useRef({
@@ -79,17 +95,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const spawnBgElement = (y: number, canvasWidth: number) => {
     const depth = scoreRef.current / 10;
     let type: 'STAR' | 'CLOUD_BG' = 'CLOUD_BG';
-    
-    // Probabilities based on depth
-    if (depth > 3000) {
-      type = 'STAR';
-    } else if (depth > 1000) {
-      // Transition zone
-      type = Math.random() > 0.5 ? 'STAR' : 'CLOUD_BG';
-    }
 
-    // Deep space override
-    if (depth > 4000) type = 'STAR';
+    // Dark mode: spawn more stars for starry night effect
+    if (isDarkMode) {
+      type = 'STAR'; // Always stars in dark mode
+    } else {
+      // Day mode: Probabilities based on depth
+      if (depth > 3000) {
+        type = 'STAR';
+      } else if (depth > 1000) {
+        // Transition zone
+        type = Math.random() > 0.5 ? 'STAR' : 'CLOUD_BG';
+      }
+      // Deep space override
+      if (depth > 4000) type = 'STAR';
+    }
 
     const id = Math.random().toString(36).substr(2, 9);
     const x = Math.random() * canvasWidth;
@@ -278,7 +298,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   };
 
   const update = useCallback((canvas: HTMLCanvasElement) => {
-    if (gameState !== GameState.PLAYING) return;
+    if (gameState !== GameState.PLAYING || isPaused) return;
 
     // --- DIFFICULTY CALCULATION ---
     // Scales from 0 to 1 over 5000 score units (was 8000, now faster ramp up)
@@ -287,14 +307,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // Difficulty mode multiplier
     let modeMultiplier = 1;
-    if (difficultyMode === 'EASY') modeMultiplier = 0.6;
+    if (difficultyMode === 'EASY') modeMultiplier = 0.35; // Very easy - slow progression
     else if (difficultyMode === 'MEDIUM') modeMultiplier = 1.0;
     else if (difficultyMode === 'HARD') modeMultiplier = 1.5;
 
+    // Storm Mode: 2x obstacles, more wind, constant rain/lightning
+    let stormModeMultiplier = 1;
+    let isStormMode = gameMode === 'STORM';
+    if (isStormMode) {
+      stormModeMultiplier = 2.0; // 2x obstacles
+    }
+
     // Dynamic Spawn Rates
-    const obstacleSpawnRate = Math.floor(Math.max(20, 60 - (difficulty * 35 * modeMultiplier))); // 60 -> 25 frames
-    const windZoneSpawnRate = Math.floor(Math.max(80, 240 - (difficulty * 160 * modeMultiplier))); // 240 -> 80 frames
-    const gustProbability = 0.001 + (difficulty * 0.008 * modeMultiplier); // 0.1% -> 0.9%
+    const obstacleSpawnRate = Math.floor(Math.max(20, 60 - (difficulty * 35 * modeMultiplier * stormModeMultiplier))); // 60 -> 25 frames
+    const windZoneSpawnRate = Math.floor(Math.max(80, 240 - (difficulty * 160 * modeMultiplier * stormModeMultiplier))); // 240 -> 80 frames
+    const gustProbability = 0.001 + (difficulty * 0.008 * modeMultiplier) + (isStormMode ? 0.01 : 0); // More gusts in storm mode
 
     // Check active power-ups
     const hasSlowMotion = activePowerUpsRef.current.some(p => p.type === 'SLOW_MOTION');
@@ -313,7 +340,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     const gravityMultiplier = 1.0 + (difficulty * 0.8 * modeMultiplier); // Up to 1.8x gravity
 
     // Score Multiplier (rewards increase with difficulty)
-    const scoreMultiplier = 1.0 + (difficulty * 1.5); // Up to 2.5x scoring
+    let scoreMultiplier = 1.0 + (difficulty * 1.5); // Up to 2.5x scoring
+
+    // Storm Mode: 3x score multiplier
+    if (isStormMode) {
+      scoreMultiplier *= 3.0;
+    }
 
     const player = playerRef.current;
     
@@ -329,8 +361,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         if (lightningRef.current < 0) lightningRef.current = 0;
     }
 
-    // Trigger Lightning (Storms)
-    if (difficulty > 0.4 && Math.random() < 0.002 * difficulty) {
+    // Trigger Lightning (Storms or Storm Mode)
+    const lightningChance = isStormMode ? 0.01 : (difficulty > 0.4 ? 0.002 * difficulty : 0);
+    if (lightningChance > 0 && Math.random() < lightningChance) {
         lightningRef.current = 0.8 + Math.random() * 0.2;
         shakeRef.current = 5; // Thunder shake
     }
@@ -343,6 +376,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         // Audio Cues
         if (isOpening) {
             if (playOpenSound) playOpenSound();
+            // Trigger umbrella bounce effect
+            player.umbrellaBounce = 1.3; // Bounce to 130%
+            player.bounceTimer = 10; // Bounce for 10 frames
         } else {
             if (playCloseSound) playCloseSound();
         }
@@ -573,14 +609,64 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // Score increases faster at higher difficulties
     scoreRef.current += Math.floor(distanceTraveled * scoreMultiplier);
-    onScoreUpdate(Math.floor(scoreRef.current / 10)); 
+    onScoreUpdate(Math.floor(scoreRef.current / 10));
+
+    // --- CHALLENGE MODE: OBJECTIVES TRACKING ---
+    if (gameMode === 'CHALLENGE' && levelProgress && selectedChallengeLevel !== null) {
+      const currentDepth = Math.floor(scoreRef.current / 10);
+      const timeElapsed = (Date.now() - levelProgress.startTime) / 1000; // in seconds
+
+      // Update objectives
+      const updatedObjectives = levelProgress.objectives.map(obj => {
+        if (obj.completed) return obj;
+
+        switch (obj.type) {
+          case 'SURVIVE_TIME':
+            obj.current = Math.floor(timeElapsed);
+            obj.completed = timeElapsed >= obj.target;
+            break;
+          case 'REACH_DEPTH':
+            obj.current = currentDepth;
+            obj.completed = currentDepth >= obj.target;
+            break;
+          case 'COLLECT_COINS':
+            // Coins are updated via onCoinCollect callback
+            break;
+          case 'NO_DAMAGE':
+            // Will be set to false when player takes damage
+            break;
+          case 'AVOID_OBSTACLES':
+            // Will be incremented when obstacles go off screen
+            break;
+        }
+        return obj;
+      });
+
+      // Update level progress
+      onLevelProgressUpdate({
+        ...levelProgress,
+        objectives: updatedObjectives,
+        timeElapsed
+      });
+
+      // Check if all objectives are completed
+      const allCompleted = updatedObjectives.every(obj => obj.completed);
+      if (allCompleted) {
+        // Player wins! Trigger game over with special message
+        if (canvasRef.current) {
+          const snapshot = canvasRef.current.toDataURL();
+          onGameOver(currentDepth, `🎉 LEVEL ${selectedChallengeLevel} COMPLETE!`, snapshot);
+        }
+      }
+    }
 
     // --- VISUAL EFFECTS ---
     
-    // RAIN SYSTEM (Triggered by Difficulty)
-    if (difficulty > 0.3 && frameCountRef.current % Math.floor(5 - difficulty * 3) === 0) {
-        // More rain at high difficulty (up to 9 drops per frame)
-        const rainCount = Math.floor(1 + difficulty * 8);
+    // RAIN SYSTEM (Triggered by Difficulty or Storm Mode)
+    const shouldSpawnRain = isStormMode || (difficulty > 0.3 && frameCountRef.current % Math.floor(5 - difficulty * 3) === 0);
+    if (shouldSpawnRain) {
+        // Storm Mode: Constant heavy rain (15 drops), otherwise based on difficulty
+        const rainCount = isStormMode ? 15 : Math.floor(1 + difficulty * 8);
         
         for (let i = 0; i < rainCount; i++) {
              particlesRef.current.push({
@@ -671,7 +757,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     });
     // Remove off-screen & Respawn
     bgElementsRef.current = bgElementsRef.current.filter(el => el.y > -100);
-    if (bgElementsRef.current.length < 50 && Math.random() > 0.5) {
+    // Dark mode: spawn more stars for ambient particle effect
+    const maxParticles = isDarkMode ? 80 : 50;
+    const spawnChance = isDarkMode ? 0.7 : 0.5;
+    if (bgElementsRef.current.length < maxParticles && Math.random() > spawnChance) {
         spawnBgElement(canvas.height + 50, canvas.width);
     }
 
@@ -727,6 +816,22 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
       if (obs.y < -500) {
         obstaclesRef.current.splice(i, 1);
+
+        // Update AVOID_OBSTACLES objective if in Challenge Mode
+        if (gameMode === 'CHALLENGE' && levelProgress) {
+          const updatedObjectives = levelProgress.objectives.map(obj => {
+            if (obj.type === 'AVOID_OBSTACLES' && !obj.completed) {
+              obj.current += 1;
+              obj.completed = obj.current >= obj.target;
+            }
+            return obj;
+          });
+          onLevelProgressUpdate({
+            ...levelProgress,
+            objectives: updatedObjectives
+          });
+        }
+
         continue;
       }
 
@@ -778,6 +883,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
            // No shield - game over
            createExplosion(player.x, player.y);
            if (playCrashSound) playCrashSound();
+
+           // Mark NO_DAMAGE objective as failed if in Challenge Mode
+           if (gameMode === 'CHALLENGE' && levelProgress) {
+             const updatedObjectives = levelProgress.objectives.map(obj => {
+               if (obj.type === 'NO_DAMAGE') {
+                 obj.current = 0; // Failed
+                 obj.completed = false;
+               }
+               return obj;
+             });
+             onLevelProgressUpdate({
+               ...levelProgress,
+               objectives: updatedObjectives
+             });
+           }
 
            const snapshot = canvas.toDataURL('image/jpeg', 0.5);
            onGameOver(Math.floor(scoreRef.current / 10), `Hit a ${obs.type.toLowerCase()}`, snapshot);
@@ -899,6 +1019,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
           onCoinCollect(1);
         }
 
+        // Update COLLECT_COINS objective if in Challenge Mode
+        if (gameMode === 'CHALLENGE' && levelProgress) {
+          const updatedObjectives = levelProgress.objectives.map(obj => {
+            if (obj.type === 'COLLECT_COINS' && !obj.completed) {
+              obj.current += 1;
+              obj.completed = obj.current >= obj.target;
+            }
+            return obj;
+          });
+          onLevelProgressUpdate({
+            ...levelProgress,
+            objectives: updatedObjectives
+          });
+        }
+
         // Visual feedback - sparkle particles
         for (let j = 0; j < 12; j++) {
           particlesRef.current.push({
@@ -965,6 +1100,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     }
 
+    // Umbrella bounce animation
+    if (player.bounceTimer > 0) {
+      player.bounceTimer--;
+      // Elastic bounce back to 1.0
+      player.umbrellaBounce = 1.0 + (player.bounceTimer / 10) * 0.3;
+      if (player.bounceTimer === 0) {
+        player.umbrellaBounce = 1.0;
+      }
+    }
+
     // Spinning animation
     if (player.isSpinning) {
       player.spinRotation += 0.2;
@@ -980,7 +1125,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     }
 
     frameCountRef.current++;
-  }, [gameState, onScoreUpdate, onGameOver, playCrashSound, playOpenSound, playCloseSound]);
+  }, [gameState, isPaused, difficultyMode, isDarkMode, onScoreUpdate, onGameOver, onCoinCollect, playCrashSound, playOpenSound, playCloseSound]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -993,28 +1138,48 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.translate(dx, dy);
     }
 
-    // Background Gradient based on score (Depth)
+    // Background Gradient based on score (Depth) and Dark Mode
     const depth = scoreRef.current / 10;
     // Recalculate difficulty for rendering
     const difficulty = Math.min(Math.max(0, scoreRef.current - 200) / 5000, 1);
-    
+
     let bgGradient;
-    if (depth < 1000) {
-      bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      bgGradient.addColorStop(0, '#38bdf8'); // Sky blue
-      bgGradient.addColorStop(1, '#bae6fd');
-    } else if (depth < 3000) {
-      bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      bgGradient.addColorStop(0, '#e879f9'); // Sunset/Dusk
-      bgGradient.addColorStop(1, '#818cf8');
+
+    if (isDarkMode) {
+      // Night Mode - Always dark sky with stars
+      if (depth < 1000) {
+        bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        bgGradient.addColorStop(0, '#0f172a'); // Dark blue night
+        bgGradient.addColorStop(1, '#1e293b');
+      } else if (depth < 3000) {
+        bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        bgGradient.addColorStop(0, '#1e1b4b'); // Deep purple night
+        bgGradient.addColorStop(1, '#312e81');
+      } else {
+        bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        bgGradient.addColorStop(0, '#0c0a1f'); // Deep space
+        bgGradient.addColorStop(1, '#1a1625');
+      }
     } else {
-      bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      bgGradient.addColorStop(0, '#1e1b4b'); // Space/Dark
-      bgGradient.addColorStop(1, '#312e81');
+      // Day Mode - Bright sky
+      if (depth < 1000) {
+        bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        bgGradient.addColorStop(0, '#38bdf8'); // Sky blue
+        bgGradient.addColorStop(1, '#bae6fd');
+      } else if (depth < 3000) {
+        bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        bgGradient.addColorStop(0, '#e879f9'); // Sunset/Dusk
+        bgGradient.addColorStop(1, '#818cf8');
+      } else {
+        bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        bgGradient.addColorStop(0, '#1e1b4b'); // Space/Dark
+        bgGradient.addColorStop(1, '#312e81');
+      }
     }
+
     ctx.fillStyle = bgGradient;
     ctx.fillRect(
-        -shakeRef.current, -shakeRef.current, 
+        -shakeRef.current, -shakeRef.current,
         canvas.width + shakeRef.current * 2, canvas.height + shakeRef.current * 2
     );
 
@@ -1027,9 +1192,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // Draw Background Elements (Parallax Layer)
     bgElementsRef.current.forEach(el => {
+        ctx.save(); // Save state before each element
         ctx.globalAlpha = el.opacity;
         ctx.fillStyle = '#ffffff';
-        
+
         if (el.type === 'STAR') {
             ctx.beginPath();
             ctx.arc(el.x, el.y, el.size, 0, Math.PI * 2);
@@ -1039,12 +1205,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.arc(el.x, el.y, el.size, 0, Math.PI * 2);
             ctx.fill();
         }
+        ctx.restore(); // Restore state after each element
     });
-    ctx.globalAlpha = 1.0;
 
     // Draw Speed Lines, Gusts, and RAIN (Behind everything)
     particlesRef.current.forEach(p => {
         if (p.type === 'SPEED_LINE' || p.type === 'GUST' || p.type === 'RAIN') {
+            ctx.save(); // Save state for each particle
             if (p.type === 'SPEED_LINE') {
                 ctx.strokeStyle = p.color;
                 ctx.lineWidth = 2;
@@ -1053,7 +1220,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.moveTo(p.x, p.y);
                 ctx.lineTo(p.x, p.y - p.size);
                 ctx.stroke();
-                ctx.globalAlpha = 1;
             } else if (p.type === 'GUST') {
                 ctx.strokeStyle = p.color;
                 ctx.lineWidth = 2 + Math.random() * 2;
@@ -1062,7 +1228,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.moveTo(p.x, p.y);
                 ctx.lineTo(p.x - p.vx * 3, p.y); // Trail behind velocity
                 ctx.stroke();
-                ctx.globalAlpha = 1;
             } else if (p.type === 'RAIN') {
                 ctx.strokeStyle = p.color;
                 ctx.lineWidth = 1.5; // Thicker rain for visibility
@@ -1070,10 +1235,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
                 ctx.beginPath();
                 ctx.moveTo(p.x, p.y);
                 // Rain slant determined by vx
-                ctx.lineTo(p.x - p.vx * 2, p.y - p.size); 
+                ctx.lineTo(p.x - p.vx * 2, p.y - p.size);
                 ctx.stroke();
-                ctx.globalAlpha = 1;
             }
+            ctx.restore(); // Restore state after each particle
         }
     });
 
@@ -1277,7 +1442,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.rotate(player.angle);
     }
 
-    // Stickman Body
+    // Stickman Body - Enhanced Design
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 3;
     ctx.lineCap = 'round';
@@ -1287,99 +1452,279 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     const isFallingFast = player.vy > 12 && !player.isUmbrellaOpen;
     const flailOffset = isFallingFast ? Math.sin(frameCountRef.current * 0.3) * 10 : 0;
 
-    // Head - add worried expression when falling fast
+    // Head - Improved design with better proportions
     ctx.beginPath();
-    ctx.arc(0, -30, 10, 0, Math.PI * 2);
-    ctx.fillStyle = '#000';
+    ctx.arc(0, -30, 12, 0, Math.PI * 2);
+    const headGradient = ctx.createRadialGradient(0, -30, 0, 0, -30, 12);
+    headGradient.addColorStop(0, '#fcd34d'); // Brighter yellow center
+    headGradient.addColorStop(1, '#f59e0b'); // Darker yellow edge
+    ctx.fillStyle = headGradient;
     ctx.fill();
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 2;
+    ctx.stroke();
 
-    // Eyes when falling fast (worried)
+    // Hair - Simple spiky style
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-8, -38);
+    ctx.lineTo(-10, -42);
+    ctx.moveTo(-3, -40);
+    ctx.lineTo(-3, -44);
+    ctx.moveTo(3, -40);
+    ctx.lineTo(3, -44);
+    ctx.moveTo(8, -38);
+    ctx.lineTo(10, -42);
+    ctx.stroke();
+
+    // Eyes - Animated based on state
     if (isFallingFast) {
+      // Wide worried eyes
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-4, -32, 3, 0, Math.PI * 2);
+      ctx.arc(4, -32, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // White scared highlights (smaller, more subtle)
       ctx.fillStyle = '#fff';
       ctx.beginPath();
-      ctx.arc(-3, -32, 2, 0, Math.PI * 2);
-      ctx.arc(3, -32, 2, 0, Math.PI * 2);
+      ctx.arc(-3, -33, 1, 0, Math.PI * 2);
+      ctx.arc(5, -33, 1, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (player.isUmbrellaOpen) {
+      // Calm eyes
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(-4, -31, 2, 0, Math.PI * 2);
+      ctx.arc(4, -31, 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Normal eyes with blink animation
+      const blinkPhase = frameCountRef.current % 200;
+      if (blinkPhase < 5) {
+        // Blinking - draw lines instead of circles
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-6, -31);
+        ctx.lineTo(-2, -31);
+        ctx.moveTo(2, -31);
+        ctx.lineTo(6, -31);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(-4, -31, 2, 0, Math.PI * 2);
+        ctx.arc(4, -31, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Mouth - expression based on state
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (isFallingFast) {
+      // Open mouth (scared)
+      ctx.arc(0, -26, 3, 0, Math.PI);
+    } else if (player.isUmbrellaOpen) {
+      // Slight smile
+      ctx.arc(0, -27, 2, 0.2, Math.PI - 0.2);
+    } else {
+      // Neutral
+      ctx.moveTo(-3, -26);
+      ctx.lineTo(3, -26);
+    }
+    ctx.stroke();
+
+    // Body - Improved with torso
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(0, -18);
+    ctx.lineTo(0, 0); // Torso
+    ctx.stroke();
+
+    // Shoulders/chest detail
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -15, 8, 0.3, Math.PI - 0.3); // Chest/shoulder line
+    ctx.stroke();
+
+    // Arms - Enhanced with joints and smoother motion
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    const shoulderY = -15;
+
+    if (player.isDancing) {
+      // Dance animation - arms waving enthusiastically
+      const dancePhase = (player.danceTimer / 60) * Math.PI * 4;
+      const leftArmAngle = Math.sin(dancePhase) * 0.8;
+      const rightArmAngle = Math.sin(dancePhase + Math.PI) * 0.8;
+
+      // Left arm
+      ctx.beginPath();
+      ctx.moveTo(0, shoulderY);
+      const leftElbowX = -12 * Math.cos(leftArmAngle);
+      const leftElbowY = shoulderY + 8 + 8 * Math.sin(leftArmAngle);
+      ctx.lineTo(leftElbowX, leftElbowY);
+      ctx.lineTo(leftElbowX - 10, leftElbowY - 12);
+      ctx.stroke();
+
+      // Right arm
+      ctx.beginPath();
+      ctx.moveTo(0, shoulderY);
+      const rightElbowX = 12 * Math.cos(rightArmAngle);
+      const rightElbowY = shoulderY + 8 + 8 * Math.sin(rightArmAngle);
+      ctx.lineTo(rightElbowX, rightElbowY);
+      ctx.lineTo(rightElbowX + 10, rightElbowY - 12);
+      ctx.stroke();
+    } else if (isFallingFast) {
+      // Flailing arms with elbow joints
+      ctx.beginPath();
+      ctx.moveTo(0, shoulderY);
+      ctx.lineTo(-12 - flailOffset, shoulderY - 5);
+      ctx.lineTo(-18 - flailOffset * 1.5, shoulderY + 5 + flailOffset);
+      ctx.moveTo(0, shoulderY);
+      ctx.lineTo(12 + flailOffset, shoulderY - 5);
+      ctx.lineTo(18 + flailOffset * 1.5, shoulderY + 5 - flailOffset);
+      ctx.stroke();
+    } else {
+      // Normal arms holding umbrella - smooth raising motion
+      const armY = shoulderY - (20 * player.umbrellaAnim);
+      const armXOffset = 12;
+      const elbowY = shoulderY + (armY - shoulderY) * 0.5;
+
+      // Left arm with elbow
+      ctx.beginPath();
+      ctx.moveTo(0, shoulderY);
+      ctx.lineTo(-armXOffset * 0.7, elbowY);
+      ctx.lineTo(-armXOffset, armY);
+      ctx.stroke();
+
+      // Right arm with elbow
+      ctx.beginPath();
+      ctx.moveTo(0, shoulderY);
+      ctx.lineTo(armXOffset * 0.7, elbowY);
+      ctx.lineTo(armXOffset, armY);
+      ctx.stroke();
+    }
+
+    // Hands holding umbrella
+    if (player.umbrellaAnim > 0.5 && !player.isDancing) {
+      ctx.fillStyle = '#fcd34d';
+      ctx.beginPath();
+      ctx.arc(-12, shoulderY - (20 * player.umbrellaAnim), 3, 0, Math.PI * 2);
+      ctx.arc(12, shoulderY - (20 * player.umbrellaAnim), 3, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Body
-    ctx.beginPath();
-    ctx.moveTo(0, -20);
-    ctx.lineTo(0, 10);
-    ctx.stroke();
-
-    // Arms - dance animation or normal
-    ctx.beginPath();
-    ctx.moveTo(0, -15);
+    // Legs - Enhanced with knee joints
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    const hipY = 0;
+    const legLength = 22;
 
     if (player.isDancing) {
-      // Dance animation - arms waving
+      // Dance animation - legs kicking with knees
       const dancePhase = (player.danceTimer / 60) * Math.PI * 4;
-      const leftArmY = -15 - 20 + Math.sin(dancePhase) * 10;
-      const rightArmY = -15 - 20 + Math.sin(dancePhase + Math.PI) * 10;
-      const armXOffset = 15 + Math.cos(dancePhase) * 5;
+      const leftLegSpread = 8 + Math.sin(dancePhase) * 10;
+      const rightLegSpread = 8 + Math.sin(dancePhase + Math.PI) * 10;
 
-      ctx.lineTo(-armXOffset, leftArmY);
-      ctx.moveTo(0, -15);
-      ctx.lineTo(armXOffset, rightArmY);
+      // Left leg with knee
+      ctx.beginPath();
+      ctx.moveTo(0, hipY);
+      const leftKneeY = hipY + legLength * 0.6;
+      ctx.lineTo(-leftLegSpread * 0.5, leftKneeY);
+      ctx.lineTo(-leftLegSpread, hipY + legLength);
+      ctx.stroke();
+
+      // Right leg with knee
+      ctx.beginPath();
+      ctx.moveTo(0, hipY);
+      const rightKneeY = hipY + legLength * 0.6;
+      ctx.lineTo(rightLegSpread * 0.5, rightKneeY);
+      ctx.lineTo(rightLegSpread, hipY + legLength);
+      ctx.stroke();
     } else if (isFallingFast) {
-      // Flailing arms when falling
-      ctx.lineTo(-15 - flailOffset, -15 + flailOffset);
-      ctx.moveTo(0, -15);
-      ctx.lineTo(15 + flailOffset, -15 - flailOffset);
+      // Legs flailing with dramatic knee bends
+      ctx.beginPath();
+      ctx.moveTo(0, hipY);
+      ctx.lineTo(-8 - flailOffset, hipY + 12);
+      ctx.lineTo(-5 - flailOffset * 1.5, hipY + legLength);
+      ctx.moveTo(0, hipY);
+      ctx.lineTo(8 + flailOffset, hipY + 12);
+      ctx.lineTo(5 + flailOffset * 1.5, hipY + legLength);
+      ctx.stroke();
     } else {
-      // Normal arms holding umbrella
-      const armY = -15 - (20 * player.umbrellaAnim);
-      const armXOffset = 15;
-      ctx.lineTo(-armXOffset, armY);
-      ctx.moveTo(0, -15);
-      ctx.lineTo(armXOffset, armY);
+      // Normal legs with slight spread when umbrella opens
+      const legSpread = 6 * player.umbrellaAnim;
+      const kneeY = hipY + legLength * 0.55;
+
+      // Left leg with knee
+      ctx.beginPath();
+      ctx.moveTo(0, hipY);
+      ctx.lineTo(-legSpread * 0.6, kneeY);
+      ctx.lineTo(-legSpread, hipY + legLength);
+      ctx.stroke();
+
+      // Right leg with knee
+      ctx.beginPath();
+      ctx.moveTo(0, hipY);
+      ctx.lineTo(legSpread * 0.6, kneeY);
+      ctx.lineTo(legSpread, hipY + legLength);
+      ctx.stroke();
     }
-    ctx.stroke();
 
-    // Legs - dance animation or normal
-    ctx.beginPath();
-    ctx.moveTo(0, 10);
-
+    // Feet
+    ctx.fillStyle = '#000';
     if (player.isDancing) {
-      // Dance animation - legs kicking
       const dancePhase = (player.danceTimer / 60) * Math.PI * 4;
-      const leftLegSpread = 5 + Math.sin(dancePhase) * 8;
-      const rightLegSpread = 5 + Math.sin(dancePhase + Math.PI) * 8;
-      const legLength = 20;
-
-      ctx.lineTo(-leftLegSpread, 10 + legLength);
-      ctx.moveTo(0, 10);
-      ctx.lineTo(rightLegSpread, 10 + legLength);
-    } else if (isFallingFast) {
-      // Legs flailing when falling
-      const legLength = 20;
-      ctx.lineTo(-5 - flailOffset, 10 + legLength);
-      ctx.moveTo(0, 10);
-      ctx.lineTo(5 + flailOffset, 10 + legLength);
+      const leftLegSpread = 8 + Math.sin(dancePhase) * 10;
+      const rightLegSpread = 8 + Math.sin(dancePhase + Math.PI) * 10;
+      ctx.beginPath();
+      ctx.ellipse(-leftLegSpread, hipY + legLength, 3, 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(rightLegSpread, hipY + legLength, 3, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
     } else {
-      // Normal legs
-      const legSpread = 5 * player.umbrellaAnim;
-      const legLength = 20;
-      ctx.lineTo(-legSpread, 10 + legLength);
-      ctx.moveTo(0, 10);
-      ctx.lineTo(legSpread, 10 + legLength);
+      const legSpread = isFallingFast ? 5 : 6 * player.umbrellaAnim;
+      ctx.beginPath();
+      ctx.ellipse(-legSpread, hipY + legLength, 3, 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(legSpread, hipY + legLength, 3, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
-    ctx.stroke();
 
-    // Umbrella
-    const umbrellaColor = '#ef4444';
-    ctx.fillStyle = umbrellaColor;
-    ctx.strokeStyle = '#b91c1c';
+    // Umbrella (with bounce effect) - Enhanced Design
+    // Apply bounce scale
+    ctx.save();
+    ctx.scale(player.umbrellaBounce, player.umbrellaBounce);
 
     const handleY = -35;
-    const stickLength = 30;
+    const stickLength = 32;
     const tipY = handleY - stickLength;
 
-    // Umbrella stick
+    // Umbrella stick/shaft with gradient
+    const stickGradient = ctx.createLinearGradient(0, handleY, 0, tipY);
+    stickGradient.addColorStop(0, '#8b5cf6'); // Purple handle
+    stickGradient.addColorStop(0.3, '#7c3aed');
+    stickGradient.addColorStop(1, '#6d28d9'); // Darker tip
+    ctx.strokeStyle = stickGradient;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(0, handleY);
     ctx.lineTo(0, tipY);
+    ctx.stroke();
+
+    // Umbrella handle curve
+    ctx.strokeStyle = '#8b5cf6';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, handleY, 4, Math.PI, Math.PI * 2);
     ctx.stroke();
 
     const maxRadius = 40;
@@ -1430,36 +1775,73 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
       ctx.restore();
     } else {
-      // Normal umbrella
+      // Normal umbrella with enhanced design
+      const archHeight = 12 * player.umbrellaAnim;
+
+      // Umbrella canopy with gradient
+      const canopyGradient = ctx.createRadialGradient(0, tipY - archHeight * 0.5, 0, 0, tipY - archHeight * 0.5, currentRadius);
+      canopyGradient.addColorStop(0, '#fca5a5'); // Light red center
+      canopyGradient.addColorStop(0.5, '#ef4444'); // Bright red
+      canopyGradient.addColorStop(1, '#b91c1c'); // Dark red edge
+
+      ctx.fillStyle = canopyGradient;
+      ctx.strokeStyle = '#991b1b';
+      ctx.lineWidth = 2;
+
+      // Draw main canopy shape
       ctx.beginPath();
       ctx.moveTo(0, tipY);
       ctx.quadraticCurveTo(
-        -currentRadius / 2, tipY - (10 * player.umbrellaAnim),
+        -currentRadius / 2, tipY - archHeight,
         -currentRadius, currentCornerY
       );
-      if (player.umbrellaAnim > 0.1) {
-        ctx.lineTo(currentRadius, currentCornerY);
-      } else {
-        ctx.lineTo(currentRadius, currentCornerY);
-      }
+      ctx.lineTo(currentRadius, currentCornerY);
       ctx.quadraticCurveTo(
-        currentRadius / 2, tipY - (10 * player.umbrellaAnim),
+        currentRadius / 2, tipY - archHeight,
         0, tipY
       );
-
-      ctx.fillStyle = umbrellaColor;
       ctx.fill();
       ctx.stroke();
+
+      // Umbrella ribs/segments for detail (only when open enough)
+      if (player.umbrellaAnim > 0.5) {
+        ctx.strokeStyle = '#7f1d1d';
+        ctx.lineWidth = 1.5;
+        const numRibs = 6;
+        for (let i = 0; i < numRibs; i++) {
+          const angle = (i / (numRibs - 1)) * Math.PI;
+          const ribX = Math.cos(angle - Math.PI / 2) * currentRadius;
+          const ribY = currentCornerY + Math.sin(angle - Math.PI / 2) * archHeight;
+
+          ctx.beginPath();
+          ctx.moveTo(0, tipY);
+          ctx.lineTo(ribX, ribY);
+          ctx.stroke();
+        }
+      }
+
+      // Decorative edge trim
+      if (player.umbrellaAnim > 0.8) {
+        ctx.strokeStyle = '#fef3c7';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(-currentRadius, currentCornerY);
+        ctx.lineTo(currentRadius, currentCornerY);
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+      }
     }
 
     ctx.restore();
 
     // Particles (Foreground)
     particlesRef.current.forEach((p) => {
-        if (p.type === 'SPEED_LINE' || p.type === 'GUST' || p.type === 'RAIN') return; 
+        if (p.type === 'SPEED_LINE' || p.type === 'GUST' || p.type === 'RAIN') return;
 
+        ctx.save(); // Save state for each particle
         ctx.globalAlpha = p.life;
-        
+
         if (p.type === 'SHOCKWAVE') {
             ctx.strokeStyle = p.color;
             ctx.lineWidth = 4 * p.life;
@@ -1472,7 +1854,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.lineCap = 'round';
             ctx.beginPath();
             ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x, p.y + p.size); 
+            ctx.lineTo(p.x, p.y + p.size);
             ctx.stroke();
         } else {
             ctx.fillStyle = p.color;
@@ -1480,13 +1862,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
             ctx.fill();
         }
-        ctx.globalAlpha = 1;
+        ctx.restore(); // Restore state after each particle
     });
 
     // Lightning Flash Effect (Overlay)
     if (lightningRef.current > 0) {
+        ctx.save();
         ctx.fillStyle = `rgba(255, 255, 255, ${lightningRef.current * 0.4})`;
         ctx.fillRect(-shakeRef.current, -shakeRef.current, canvas.width+50, canvas.height+50);
+        ctx.restore();
     }
 
     ctx.restore();
@@ -1753,6 +2137,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         lightningRef.current = 0;
         lastUmbrellaState.current = false;
         windGustRef.current.active = false;
+
+        // Storm Mode: Give player a free shield at start
+        if (gameMode === 'STORM') {
+          activePowerUpsRef.current = [{
+            type: 'SHIELD',
+            timeLeft: 5000, // 5 seconds
+            duration: 5000
+          }];
+        }
         
         if (canvasRef.current) {
              playerRef.current.x = canvasRef.current.width / 2;

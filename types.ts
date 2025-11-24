@@ -101,3 +101,30 @@ export interface LeaderboardEntry {
   score: number;
   date?: any;
 }
+
+export type GameMode = 'ENDLESS' | 'STORM' | 'CHALLENGE';
+
+export interface ChallengeLevel {
+  id: number;
+  name: string;
+  description: string;
+  objectives: ChallengObjective[];
+  theme: 'GENTLE' | 'NIGHT' | 'THUNDER' | 'TORNADO' | 'SPACE';
+  duration?: number; // Time limit in seconds (optional)
+  targetDepth?: number; // Target depth to reach
+  coinGoal?: number; // Number of coins to collect
+}
+
+export interface ChallengObjective {
+  type: 'SURVIVE_TIME' | 'REACH_DEPTH' | 'COLLECT_COINS' | 'NO_DAMAGE' | 'AVOID_OBSTACLES';
+  description: string;
+  target: number;
+  current: number;
+  completed: boolean;
+}
+
+export interface LevelProgress {
+  objectives: ChallengObjective[];
+  startTime: number;
+  timeElapsed: number;
+}
