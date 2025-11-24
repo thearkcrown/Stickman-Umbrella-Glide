@@ -62,10 +62,9 @@ export const getOrCreatePlayerName = (): string => {
     return stored;
   }
 
-  // Generate new unique name
+  // Generate new unique name (only for first-time users)
   const newName = generateShortUniqueName();
   localStorage.setItem('playerName', newName);
-  console.log('🎲 Generated unique player name:', newName);
 
   return newName;
 };
