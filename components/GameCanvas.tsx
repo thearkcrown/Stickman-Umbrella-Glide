@@ -1940,12 +1940,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fillText("WIND", cx, cy + 36);
     }
 
-    // --- HUD: ACTIVE POWER-UPS INDICATORS ---
+    // --- HUD: ACTIVE POWER-UPS INDICATORS ---  SCALED AND BIGGER
     if (activePowerUpsRef.current.length > 0) {
-      const startX = 10;
-      const startY = 10;
-      const boxSize = 50;
-      const spacing = 10;
+      const boxSize = 80 * scale; // MUCH BIGGER - scaled to screen
+      const spacing = 12 * scale;
+      const startX = 10 * scale;
+      const startY = 10 * scale;
 
       activePowerUpsRef.current.forEach((powerUp, index) => {
         const x = startX;
@@ -1976,42 +1976,68 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             break;
         }
 
-        // Background box
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        // Pulsing glow effect
+        const pulse = Math.sin(frameCountRef.current * 0.1) * 0.3 + 0.7;
+        ctx.save();
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 15 * scale * pulse;
+
+        // Background box with gradient
+        const bgGradient = ctx.createLinearGradient(x, y, x, y + boxSize);
+        bgGradient.addColorStop(0, 'rgba(0, 0, 0, 0.9)');
+        bgGradient.addColorStop(1, 'rgba(0, 0, 0, 0.7)');
+        ctx.fillStyle = bgGradient;
         ctx.fillRect(x, y, boxSize, boxSize);
 
-        // Border with power-up color
+        // Border with power-up color - THICKER
         ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 4 * scale;
         ctx.strokeRect(x, y, boxSize, boxSize);
 
-        // Icon
-        ctx.font = 'bold 24px sans-serif';
+        // Icon - SCALED
+        ctx.font = `bold ${36 * scale}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(emoji, x + boxSize / 2, y + boxSize / 2 - 5);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(emoji, x + boxSize / 2, y + boxSize / 2 - 5 * scale);
+
+        ctx.restore();
 
         // Timer bar (if not shield)
         if (powerUp.timeLeft > 0) {
           const progress = powerUp.timeLeft / powerUp.duration;
-          const barHeight = 4;
+          const barHeight = 6 * scale; // THICKER bar
           const barY = y + boxSize - barHeight;
 
           // Background
           ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
           ctx.fillRect(x, barY, boxSize, barHeight);
 
-          // Progress
-          ctx.fillStyle = color;
+          // Progress with gradient
+          const barGradient = ctx.createLinearGradient(x, barY, x + boxSize, barY);
+          barGradient.addColorStop(0, color);
+          barGradient.addColorStop(1, color + 'aa'); // Slightly transparent at end
+          ctx.fillStyle = barGradient;
           ctx.fillRect(x, barY, boxSize * progress, barHeight);
+
+          // Progress percentage text
+          const percentText = Math.ceil(progress * 100) + '%';
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `bold ${10 * scale}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(percentText, x + boxSize / 2, y + boxSize - barHeight / 2);
         }
 
-        // Name label (outside box)
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.font = 'bold 8px sans-serif';
+        // Name label (outside box) - SCALED
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.font = `bold ${11 * scale}px sans-serif`;
         ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText(name, x + boxSize + 5, y + boxSize / 2 - 4);
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4 * scale;
+        ctx.fillText(name, x + boxSize + 8 * scale, y + boxSize / 2);
+        ctx.shadowBlur = 0;
       });
     }
 
