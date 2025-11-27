@@ -453,11 +453,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
              currentWindY += windGustRef.current.vy;
         }
     } else {
-        // Dynamic Gust Chance
-        if (scoreRef.current > 300 && Math.random() < gustProbability) {
+        // Dynamic Gust Chance (ONLY in Storm Mode)
+        if (isStormMode && scoreRef.current > 300 && Math.random() < gustProbability) {
             const direction = Math.random() > 0.5 ? 1 : -1;
             const difficultyMult = 1 + difficulty;
-            
+
             windGustRef.current = {
                 active: true,
                 vx: direction * (5 + Math.random() * 8) * difficultyMult, // Stronger with difficulty
@@ -470,13 +470,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // 3. Horizontal Movement (Drag & Inertia)
     // Calculate distance to target
     let dx = player.targetX - player.x;
-    
-    // Responsiveness: Lower = more drift/drag (Umbrella Open), Higher = Snappy (Closed)
-    const responsiveness = player.isUmbrellaOpen ? 0.05 : 0.12;
+
+    // Responsiveness: INCREASED for better control - umbrella open now more responsive
+    const responsiveness = player.isUmbrellaOpen ? 0.08 : 0.15; // Was 0.05/0.12, now 0.08/0.15
     let moveSpeed = dx * responsiveness;
 
-    // Clamp max lateral speed
-    const MAX_LATERAL_SPEED = 20;
+    // Clamp max lateral speed - INCREASED for better mobility
+    const MAX_LATERAL_SPEED = 25; // Was 20, now 25
     if (moveSpeed > MAX_LATERAL_SPEED) moveSpeed = MAX_LATERAL_SPEED;
     if (moveSpeed < -MAX_LATERAL_SPEED) moveSpeed = -MAX_LATERAL_SPEED;
     
@@ -769,8 +769,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       spawnObstacle(canvas.width, canvas.height, difficulty);
     }
     
-    // Spawn Wind Zones (Dynamic Rate)
-    if (frameCountRef.current % windZoneSpawnRate === 0 && scoreRef.current > 200) {
+    // Spawn Wind Zones (ONLY in Storm Mode)
+    if (isStormMode && frameCountRef.current % windZoneSpawnRate === 0 && scoreRef.current > 200) {
         spawnWindZone(canvas.width, canvas.height, difficulty);
     }
 
