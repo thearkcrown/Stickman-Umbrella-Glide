@@ -838,16 +838,16 @@ const App: React.FC = () => {
       </div>
 
       {/* Start Screen */}
-      <div className={`absolute inset-0 flex items-start sm:items-center justify-center bg-black/60 backdrop-blur-sm z-30 transition-all duration-700 overflow-y-auto scrollbar-hide ${gameState === GameState.START ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+      <div className={`absolute inset-0 flex items-start justify-center bg-black/60 backdrop-blur-sm z-30 transition-all duration-700 overflow-y-auto scrollbar-hide ${gameState === GameState.START ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
           {/* Animated Falling Stickman */}
           {gameState === GameState.START && <HomeStickman />}
 
-          <div className="flex flex-col md:flex-row gap-4 sm:gap-8 items-center max-w-4xl w-full p-4 sm:p-6 md:p-8 pt-8 sm:pt-6 my-auto">
+          <div className="flex flex-col md:flex-row gap-2 sm:gap-4 md:gap-8 items-center max-w-4xl w-full p-2 sm:p-4 md:p-6 pt-4 sm:pt-6 my-auto">
 
               {/* Left Column: Title & Play */}
               <div className="text-center md:text-left flex-1 w-full">
-                <div className="mb-3 sm:mb-4 md:mb-6 mt-2 sm:mt-0">
-                  <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-2 leading-tight" style={{
+                <div className="mb-2 sm:mb-3 md:mb-4 mt-1 sm:mt-0">
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black mb-1 sm:mb-2 leading-tight" style={{
                     background: 'linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #ec4899 100%)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
@@ -857,56 +857,56 @@ const App: React.FC = () => {
                   }}>
                     STICKMAN<br/>UMBRELLA<br/>GLIDE
                   </h1>
-                  <div className="text-yellow-400 text-base sm:text-lg md:text-xl font-bold tracking-wider">
+                  <div className="text-yellow-400 text-sm sm:text-base md:text-lg font-bold tracking-wider">
                     ☂️ Hold the Sky, Drop with Style ☂️
                   </div>
                 </div>
-                <p className="text-gray-200 mb-4 sm:mb-8 text-sm sm:text-base md:text-lg font-medium bg-black/30 backdrop-blur-sm rounded-lg p-3 sm:p-4 border border-white/10">
-                  <span className="block text-blue-300 font-bold text-base sm:text-lg mb-2">🎮 HOW TO PLAY:</span>
+                <p className="text-gray-200 mb-2 sm:mb-4 text-xs sm:text-sm md:text-base font-medium bg-black/30 backdrop-blur-sm rounded-lg p-2 sm:p-3 border border-white/10">
+                  <span className="block text-blue-300 font-bold text-sm sm:text-base mb-1">🎮 HOW TO PLAY:</span>
                   Hold to <span className="text-blue-400 font-bold">Open Umbrella</span> (Slow)<br/>
                   Release to <span className="text-red-400 font-bold">Dive Fast</span><br/>
                   Drag to <span className="text-purple-400 font-bold">Move Left/Right</span>
                 </p>
-                
-                <div className="flex flex-col sm:flex-row gap-3 mb-4 sm:mb-6">
+
+                <div className="flex flex-col sm:flex-row gap-2 mb-2 sm:mb-4">
                   <button
                     onClick={handleStart}
-                    className="group relative inline-flex h-14 sm:h-16 flex-1 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 font-bold text-white transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-400/50 touch-manipulation shadow-lg shadow-blue-500/50"
+                    className="group relative inline-flex h-10 sm:h-12 md:h-14 flex-1 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 font-bold text-white transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-400/50 touch-manipulation shadow-lg shadow-blue-500/50"
                   >
-                    <span className="mr-2 text-xl sm:text-2xl">🚀</span>
-                    <span className="text-lg sm:text-xl font-black">START GAME</span>
+                    <span className="mr-1 sm:mr-2 text-lg sm:text-xl">🚀</span>
+                    <span className="text-sm sm:text-base md:text-lg font-black">START GAME</span>
                   </button>
 
                   <button
                     onClick={() => setShowShop(true)}
-                    className="group relative inline-flex h-14 sm:h-16 flex-1 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 font-bold text-black transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 pointer-events-auto touch-manipulation shadow-lg shadow-yellow-500/50"
+                    className="group relative inline-flex h-10 sm:h-12 md:h-14 flex-1 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-r from-yellow-400 to-orange-500 font-bold text-black transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-yellow-400/50 pointer-events-auto touch-manipulation shadow-lg shadow-yellow-500/50"
                   >
-                    <span className="mr-2 text-xl sm:text-2xl">🛍️</span>
-                    <span className="text-base sm:text-lg font-black">SHOP</span>
-                    <span className="ml-2 text-xs bg-black/20 px-2 py-1 rounded-full font-bold">💰 {coins}</span>
+                    <span className="mr-1 sm:mr-2 text-lg sm:text-xl">🛍️</span>
+                    <span className="text-sm sm:text-base md:text-lg font-black">SHOP</span>
+                    <span className="ml-1 sm:ml-2 text-xs bg-black/20 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full font-bold">💰 {coins}</span>
                   </button>
                 </div>
 
                 {/* Stats and Player Info */}
-                <div className="bg-black/40 backdrop-blur-md rounded-xl p-3 sm:p-4 border border-white/20 mb-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">🏆</span>
+                <div className="bg-black/40 backdrop-blur-md rounded-xl p-2 sm:p-3 border border-white/20 mb-2 sm:mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <span className="text-lg sm:text-xl">🏆</span>
                       <div>
-                        <div className="text-xs text-gray-400">Personal Best</div>
-                        <div className="text-xl sm:text-2xl font-black text-yellow-400">{highScore}m</div>
+                        <div className="text-[10px] sm:text-xs text-gray-400">Personal Best</div>
+                        <div className="text-base sm:text-xl font-black text-yellow-400">{highScore}m</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">👤</span>
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <span className="text-lg sm:text-xl">👤</span>
                       <div>
-                        <div className="text-xs text-gray-400">Player</div>
-                        <div className="text-sm sm:text-base font-bold text-blue-300">{playerName}</div>
+                        <div className="text-[10px] sm:text-xs text-gray-400">Player</div>
+                        <div className="text-xs sm:text-sm font-bold text-blue-300">{playerName}</div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-1 sm:gap-2">
                     <button
                       onClick={handleRegenerateName}
                       className="flex-1 text-xs font-bold text-yellow-300 hover:text-yellow-100 bg-yellow-500/10 hover:bg-yellow-500/20 px-3 py-2 rounded-lg border border-yellow-500/30 flex items-center justify-center gap-1 touch-manipulation transition-all"
@@ -930,60 +930,60 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Game Mode Selector */}
-                <div className="bg-black/40 backdrop-blur-md rounded-xl p-3 sm:p-4 border border-white/20 mb-4 pointer-events-auto">
-                  <div className="text-sm sm:text-base font-black text-white uppercase tracking-wider mb-3 text-center flex items-center justify-center gap-2">
-                    <span>🎮</span>
+                <div className="bg-black/40 backdrop-blur-md rounded-xl p-2 sm:p-3 border border-white/20 mb-2 sm:mb-3 pointer-events-auto">
+                  <div className="text-xs sm:text-sm font-black text-white uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1 sm:gap-2">
+                    <span className="text-sm sm:text-base">🎮</span>
                     <span>Select Game Mode</span>
-                    <span>🎮</span>
+                    <span className="text-sm sm:text-base">🎮</span>
                   </div>
-                        <div className="space-y-1.5 sm:space-y-2">
+                        <div className="space-y-1 sm:space-y-1.5">
                             <button
                                 onClick={() => handleSelectGameMode('ENDLESS')}
-                                className={`w-full py-2 sm:py-3 px-3 sm:px-4 rounded-lg text-left transition-all touch-manipulation ${
+                                className={`w-full py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg text-left transition-all touch-manipulation ${
                                     gameMode === 'ENDLESS'
                                         ? 'bg-blue-500 text-white scale-105 shadow-lg shadow-blue-500/50'
                                         : 'bg-black/40 text-gray-300 hover:bg-black/60 border border-white/20'
                                 }`}
                             >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-lg sm:text-xl">🎯</span>
+                                <div className="flex items-center gap-1 sm:gap-2">
+                                    <span className="text-base sm:text-lg">🎯</span>
                                     <div className="flex-1">
-                                        <div className="font-bold text-sm">Endless Mode</div>
-                                        <div className="text-xs opacity-80">Survive as long as possible</div>
+                                        <div className="font-bold text-xs sm:text-sm">Endless Mode</div>
+                                        <div className="text-[10px] sm:text-xs opacity-80">Survive as long as possible</div>
                                     </div>
                                 </div>
                             </button>
 
                             <button
                                 onClick={() => handleSelectGameMode('STORM')}
-                                className={`w-full py-2 sm:py-3 px-3 sm:px-4 rounded-lg text-left transition-all touch-manipulation ${
+                                className={`w-full py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg text-left transition-all touch-manipulation ${
                                     gameMode === 'STORM'
                                         ? 'bg-purple-500 text-white scale-105 shadow-lg shadow-purple-500/50'
                                         : 'bg-black/40 text-gray-300 hover:bg-black/60 border border-white/20'
                                 }`}
                             >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-lg sm:text-xl">🌀</span>
+                                <div className="flex items-center gap-1 sm:gap-2">
+                                    <span className="text-base sm:text-lg">🌀</span>
                                     <div className="flex-1">
-                                        <div className="font-bold text-sm">Storm Mode</div>
-                                        <div className="text-xs opacity-80">Hardcore · 3x Score · Free Shield</div>
+                                        <div className="font-bold text-xs sm:text-sm">Storm Mode</div>
+                                        <div className="text-[10px] sm:text-xs opacity-80">Hardcore · 3x Score · Free Shield</div>
                                     </div>
                                 </div>
                             </button>
 
                             <button
                                 onClick={() => gameMode === 'CHALLENGE' ? setShowChallengeLevels(true) : handleSelectGameMode('CHALLENGE')}
-                                className={`w-full py-2 sm:py-3 px-3 sm:px-4 rounded-lg text-left transition-all touch-manipulation ${
+                                className={`w-full py-1.5 sm:py-2 px-2 sm:px-3 rounded-lg text-left transition-all touch-manipulation ${
                                     gameMode === 'CHALLENGE'
                                         ? 'bg-yellow-500 text-black scale-105 shadow-lg shadow-yellow-500/50'
                                         : 'bg-black/40 text-gray-300 hover:bg-black/60 border border-white/20'
                                 }`}
                             >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-lg sm:text-xl">🪂</span>
+                                <div className="flex items-center gap-1 sm:gap-2">
+                                    <span className="text-base sm:text-lg">🪂</span>
                                     <div className="flex-1">
-                                        <div className="font-bold text-sm">Challenge Levels</div>
-                                        <div className="text-xs opacity-80">
+                                        <div className="font-bold text-xs sm:text-sm">Challenge Levels</div>
+                                        <div className="text-[10px] sm:text-xs opacity-80">
                                             {selectedChallengeLevel
                                                 ? `Level ${selectedChallengeLevel} Selected`
                                                 : '5 Handcrafted Missions'
@@ -991,7 +991,7 @@ const App: React.FC = () => {
                                         </div>
                                     </div>
                                     {gameMode === 'CHALLENGE' && (
-                                        <span className="text-sm">▶</span>
+                                        <span className="text-xs sm:text-sm">▶</span>
                                     )}
                                 </div>
                             </button>
@@ -1000,11 +1000,11 @@ const App: React.FC = () => {
 
                 {/* Difficulty Selector - Only show for Endless and Storm modes */}
                 {gameMode !== 'CHALLENGE' && (
-                  <div className="bg-black/40 backdrop-blur-md rounded-xl p-3 sm:p-4 border border-white/20 mb-4 pointer-events-auto">
-                    <div className="text-sm sm:text-base font-black text-white uppercase tracking-wider mb-3 text-center flex items-center justify-center gap-2">
-                      <span>⚡</span>
+                  <div className="bg-black/40 backdrop-blur-md rounded-xl p-2 sm:p-3 border border-white/20 mb-2 sm:mb-3 pointer-events-auto">
+                    <div className="text-xs sm:text-sm font-black text-white uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1 sm:gap-2">
+                      <span className="text-sm sm:text-base">⚡</span>
                       <span>Difficulty</span>
-                      <span>⚡</span>
+                      <span className="text-sm sm:text-base">⚡</span>
                     </div>
                         <div className="flex gap-1.5 sm:gap-2">
                             <button
@@ -1043,8 +1043,8 @@ const App: React.FC = () => {
               </div>
 
               {/* Right Column: Leaderboard */}
-              <div className="w-full md:w-80 bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 backdrop-blur-md shadow-xl flex flex-col h-80 sm:h-96">
-                  <h3 className="text-center text-xs sm:text-sm font-bold text-blue-300 tracking-widest uppercase mb-3 sm:mb-4 border-b border-white/10 pb-2">Global Top 10</h3>
+              <div className="w-full md:w-80 bg-white/5 border border-white/10 rounded-2xl p-2 sm:p-3 backdrop-blur-md shadow-xl flex flex-col h-48 sm:h-64 md:h-72">
+                  <h3 className="text-center text-[10px] sm:text-xs font-bold text-blue-300 tracking-widest uppercase mb-2 border-b border-white/10 pb-1 sm:pb-2">Global Top 10</h3>
 
                   <div className="flex-1 overflow-y-auto scrollbar-hide space-y-1.5 sm:space-y-2">
                     {leaderboard.length === 0 ? (
