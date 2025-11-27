@@ -6,3 +6,5 @@ dist
 # Allow MP3 files in public folder
 !public/*.mp3
 .claude
+CLAUDE.md
+pnpm-lock.yaml

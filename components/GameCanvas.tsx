@@ -20,10 +20,15 @@ interface GameCanvasProps {
   playCloseSound?: () => void;
 }
 
-const BASE_GRAVITY = 0.5;
-const BASE_GLIDE_GRAVITY = 0.15;
-const BASE_TERMINAL_VELOCITY = 15;
-const BASE_GLIDE_TERMINAL_VELOCITY = 3;
+// Base values at 1920x1080 reference resolution
+const REFERENCE_WIDTH = 1920;
+const REFERENCE_HEIGHT = 1080;
+
+// MASSIVELY REDUCED for 3x slower gameplay - scaled to screen size
+const BASE_GRAVITY = 0.18; // Was 0.5, now ~3x slower
+const BASE_GLIDE_GRAVITY = 0.06; // Was 0.15, now ~3x slower
+const BASE_TERMINAL_VELOCITY = 6; // Was 15, now ~3x slower
+const BASE_GLIDE_TERMINAL_VELOCITY = 1.5; // Was 3, now 2x slower
 const WORLD_SPEED_MULTIPLIER_MAX = 2.0; // At max difficulty, world is 2x faster
 
 const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -147,33 +152,34 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       // Determine type of wind
       const typeRoll = Math.random();
       let vx = 0, vy = 0;
-      
-      // Scale wind force with difficulty
-      const forceMult = 1 + (difficulty * 1.5); // Up to 2.5x stronger at max difficulty
+
+      // Scale wind force with difficulty - NERFED: 1.3x max instead of 2.5x
+      const forceMult = 1 + (difficulty * 0.3); // Up to 1.3x stronger at max difficulty
 
       if (typeRoll < 0.4) {
-          // Horizontal Crosswind (Left or Right)
-          vx = (Math.random() > 0.5 ? 1 : -1) * (2 + Math.random() * 3) * forceMult;
+          // Horizontal Crosswind (Left or Right) - REDUCED base force
+          vx = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random() * 2) * forceMult;
       } else if (typeRoll < 0.7) {
-          // Updraft (Slows fall / Lifts up)
+          // Updraft (Slows fall / Lifts up) - REDUCED strength
           // Negative VY pushes player up
-          vy = - (0.5 + Math.random() * 0.8) * forceMult; 
+          vy = - (0.3 + Math.random() * 0.5) * forceMult;
       } else {
-          // Downdraft (Speeds fall)
+          // Downdraft (Speeds fall) - REDUCED strength
           // Positive VY pushes player down
-          vy = (0.5 + Math.random() * 0.5) * forceMult;
+          vy = (0.3 + Math.random() * 0.4) * forceMult;
       }
 
       windZonesRef.current.push({ id, x, y, width, height, vx, vy });
   };
 
-  // Helper to spawn obstacles
-  const spawnObstacle = (canvasWidth: number, canvasHeight: number, difficulty: number) => {
+  // Helper to spawn obstacles - SCALED TO SCREEN SIZE
+  const spawnObstacle = (canvasWidth: number, canvasHeight: number, difficulty: number, scale: number) => {
     const typeRoll = Math.random();
     let type: Obstacle['type'] = 'CLOUD';
-    let width = 100;
-    let height = 60;
-    let y = canvasHeight + 100;
+    // Base sizes at reference resolution (1920x1080), then scale to actual screen
+    let width = 350 * scale; // GIANT - scales with screen size
+    let height = 200 * scale; // GIANT - scales with screen size
+    let y = canvasHeight + 100 * scale;
     let x = Math.random() * (canvasWidth - width);
     let speedX = 0;
 
@@ -182,18 +188,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     if (typeRoll < 0.4) {
       type = 'BIRD';
-      width = 40;
-      height = 20;
-      speedX = (Math.random() - 0.5) * 4 * speedMult; // Moves faster horizontally
+      width = 120 * scale; // GIANT - scales with screen
+      height = 70 * scale; // GIANT - scales with screen
+      speedX = (Math.random() - 0.5) * 4 * speedMult * scale; // Speed also scales
     } else if (typeRoll < 0.6) {
       type = 'BALLOON';
-      width = 30;
-      height = 40;
+      width = 100 * scale; // GIANT - scales with screen
+      height = 150 * scale; // GIANT - scales with screen
       speedX = 0;
     } else if (typeRoll < 0.8 && scoreRef.current > 500) {
       type = 'BUILDING';
-      width = 150 + Math.random() * 100;
-      height = 400; // Tall
+      width = (300 + Math.random() * 200) * scale; // GIANT - scales with screen
+      height = 700 * scale; // GIANT - scales with screen
       x = Math.random() > 0.5 ? 0 : canvasWidth - width; // Snap to sides
       y = canvasHeight + height;
     }
@@ -300,10 +306,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const update = useCallback((canvas: HTMLCanvasElement) => {
     if (gameState !== GameState.PLAYING || isPaused) return;
 
+    // --- SCREEN SCALE CALCULATION ---
+    // Scale everything based on current canvas size vs reference resolution
+    const scaleX = canvas.width / REFERENCE_WIDTH;
+    const scaleY = canvas.height / REFERENCE_HEIGHT;
+    const scale = Math.min(scaleX, scaleY); // Use smaller scale to maintain aspect ratio
+
     // --- DIFFICULTY CALCULATION ---
-    // Scales from 0 to 1 over 5000 score units (was 8000, now faster ramp up)
+    // Scales from 0 to 1 over 8000 score units - REBALANCED for more gradual progression
     const currentScore = scoreRef.current;
-    const difficulty = Math.min(Math.max(0, currentScore - 200) / 5000, 1);
+    const difficulty = Math.min(Math.max(0, currentScore - 200) / 8000, 1);
 
     // Difficulty mode multiplier
     let modeMultiplier = 1;
@@ -318,17 +330,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       stormModeMultiplier = 2.0; // 2x obstacles
     }
 
-    // Dynamic Spawn Rates
-    const obstacleSpawnRate = Math.floor(Math.max(20, 60 - (difficulty * 35 * modeMultiplier * stormModeMultiplier))); // 60 -> 25 frames
-    const windZoneSpawnRate = Math.floor(Math.max(80, 240 - (difficulty * 160 * modeMultiplier * stormModeMultiplier))); // 240 -> 80 frames
-    const gustProbability = 0.001 + (difficulty * 0.008 * modeMultiplier) + (isStormMode ? 0.01 : 0); // More gusts in storm mode
+    // Dynamic Spawn Rates - NERFED for less spam
+    const obstacleSpawnRate = Math.floor(Math.max(35, 80 - (difficulty * 30 * modeMultiplier * stormModeMultiplier))); // 80 -> 35 frames (was 60 -> 25)
+    const windZoneSpawnRate = Math.floor(Math.max(120, 300 - (difficulty * 140 * modeMultiplier * stormModeMultiplier))); // 300 -> 120 frames (was 240 -> 80)
+    const gustProbability = 0.0005 + (difficulty * 0.004 * modeMultiplier) + (isStormMode ? 0.005 : 0); // HALVED gust frequency
 
     // Check active power-ups
     const hasSlowMotion = activePowerUpsRef.current.some(p => p.type === 'SLOW_MOTION');
     const hasWindBreaker = activePowerUpsRef.current.some(p => p.type === 'WIND_BREAKER');
     const hasSuperGlide = activePowerUpsRef.current.some(p => p.type === 'SUPER_GLIDE');
 
-    // World Speed Scaling (1.0x -> 2.0x)
+    // World Speed Scaling (1.0x -> 2.0x) - UNCHANGED, but with slower difficulty ramp it's more manageable
     let worldSpeedMultiplier = 1.0 + (difficulty * (WORLD_SPEED_MULTIPLIER_MAX - 1.0) * modeMultiplier);
 
     // Apply Slow Motion power-up (50% speed)
@@ -336,8 +348,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       worldSpeedMultiplier *= 0.5;
     }
 
-    // Gravity Scaling (makes player fall faster at higher difficulties)
-    const gravityMultiplier = 1.0 + (difficulty * 0.8 * modeMultiplier); // Up to 1.8x gravity
+    // Gravity Scaling - NERFED from 1.8x to 1.4x max
+    const gravityMultiplier = 1.0 + (difficulty * 0.4 * modeMultiplier); // Up to 1.4x gravity (was 1.8x)
 
     // Score Multiplier (rewards increase with difficulty)
     let scoreMultiplier = 1.0 + (difficulty * 1.5); // Up to 2.5x scoring
@@ -453,11 +465,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
              currentWindY += windGustRef.current.vy;
         }
     } else {
-        // Dynamic Gust Chance
-        if (scoreRef.current > 300 && Math.random() < gustProbability) {
+        // Dynamic Gust Chance (ONLY in Storm Mode)
+        if (isStormMode && scoreRef.current > 300 && Math.random() < gustProbability) {
             const direction = Math.random() > 0.5 ? 1 : -1;
             const difficultyMult = 1 + difficulty;
-            
+
             windGustRef.current = {
                 active: true,
                 vx: direction * (5 + Math.random() * 8) * difficultyMult, // Stronger with difficulty
@@ -470,13 +482,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // 3. Horizontal Movement (Drag & Inertia)
     // Calculate distance to target
     let dx = player.targetX - player.x;
-    
-    // Responsiveness: Lower = more drift/drag (Umbrella Open), Higher = Snappy (Closed)
-    const responsiveness = player.isUmbrellaOpen ? 0.05 : 0.12;
+
+    // Responsiveness: INCREASED for better control - umbrella open now more responsive
+    const responsiveness = player.isUmbrellaOpen ? 0.08 : 0.15; // Was 0.05/0.12, now 0.08/0.15
     let moveSpeed = dx * responsiveness;
 
-    // Clamp max lateral speed
-    const MAX_LATERAL_SPEED = 20;
+    // Clamp max lateral speed - SCALED TO SCREEN SIZE
+    const MAX_LATERAL_SPEED = 12 * scale; // Scales with screen for consistent movement
     if (moveSpeed > MAX_LATERAL_SPEED) moveSpeed = MAX_LATERAL_SPEED;
     if (moveSpeed < -MAX_LATERAL_SPEED) moveSpeed = -MAX_LATERAL_SPEED;
     
@@ -489,9 +501,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     player.vx = moveSpeed + gustVx;
 
-    // 5. Vertical Physics (Gravity & Lift) - SCALED WITH DIFFICULTY
-    let currentGravity = player.isUmbrellaOpen ? BASE_GLIDE_GRAVITY : BASE_GRAVITY;
-    let currentTerminal = player.isUmbrellaOpen ? BASE_GLIDE_TERMINAL_VELOCITY : BASE_TERMINAL_VELOCITY;
+    // 5. Vertical Physics (Gravity & Lift) - SCALED WITH DIFFICULTY AND SCREEN SIZE
+    let currentGravity = (player.isUmbrellaOpen ? BASE_GLIDE_GRAVITY : BASE_GRAVITY) * scale;
+    let currentTerminal = (player.isUmbrellaOpen ? BASE_GLIDE_TERMINAL_VELOCITY : BASE_TERMINAL_VELOCITY) * scale;
 
     // Apply difficulty scaling to gravity and terminal velocity
     currentGravity *= gravityMultiplier;
@@ -500,11 +512,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     // Apply Lift: Moving horizontally creates lift (Bernoulli-ish)
     if (player.isUmbrellaOpen) {
         const liftForce = Math.abs(player.vx) * 0.1;
-        currentGravity -= liftForce * 0.05; 
-        
-        // Slight direct upward force if moving fast
-        if (Math.abs(player.vx) > 5) {
-            player.vy -= 0.05;
+        currentGravity -= liftForce * 0.05 * scale;
+
+        // Slight direct upward force if moving fast - scaled
+        if (Math.abs(player.vx) > 5 * scale) {
+            player.vy -= 0.05 * scale;
         }
     }
 
@@ -766,11 +778,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     // Spawn Obstacles (Dynamic Rate)
     if (frameCountRef.current % obstacleSpawnRate === 0) {
-      spawnObstacle(canvas.width, canvas.height, difficulty);
+      spawnObstacle(canvas.width, canvas.height, difficulty, scale);
     }
     
-    // Spawn Wind Zones (Dynamic Rate)
-    if (frameCountRef.current % windZoneSpawnRate === 0 && scoreRef.current > 200) {
+    // Spawn Wind Zones (ONLY in Storm Mode)
+    if (isStormMode && frameCountRef.current % windZoneSpawnRate === 0 && scoreRef.current > 200) {
         spawnWindZone(canvas.width, canvas.height, difficulty);
     }
 
@@ -1130,6 +1142,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const draw = useCallback((ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // --- SCREEN SCALE CALCULATION (for HUD elements) ---
+    const scaleX = canvas.width / REFERENCE_WIDTH;
+    const scaleY = canvas.height / REFERENCE_HEIGHT;
+    const scale = Math.min(scaleX, scaleY);
+
     // --- APPLY SCREEN SHAKE ---
     ctx.save();
     if (shakeRef.current > 0) {
@@ -1305,16 +1322,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.fillStyle = obs.type === 'BUILDING' ? '#374151' : obs.type === 'BIRD' ? '#ef4444' : '#f3f4f6';
       
       if (obs.type === 'CLOUD') {
+        // Draw cloud that scales with width/height
+        const cloudScale = obs.width / 100; // Scale based on original 100 width
         ctx.beginPath();
-        ctx.arc(obs.x + 20, obs.y + 20, 20, 0, Math.PI * 2);
-        ctx.arc(obs.x + 50, obs.y + 10, 30, 0, Math.PI * 2);
-        ctx.arc(obs.x + 80, obs.y + 20, 20, 0, Math.PI * 2);
+        ctx.arc(obs.x + 20 * cloudScale, obs.y + 20 * cloudScale, 20 * cloudScale, 0, Math.PI * 2);
+        ctx.arc(obs.x + 50 * cloudScale, obs.y + 10 * cloudScale, 30 * cloudScale, 0, Math.PI * 2);
+        ctx.arc(obs.x + 80 * cloudScale, obs.y + 20 * cloudScale, 20 * cloudScale, 0, Math.PI * 2);
         ctx.fill();
       } else if (obs.type === 'BIRD') {
+        // Draw bird that properly scales with width/height
+        const wingHeight = obs.height / 2; // Wing curve scales with height
         ctx.beginPath();
         ctx.moveTo(obs.x, obs.y);
-        ctx.quadraticCurveTo(obs.x + obs.width/2, obs.y - 10, obs.x + obs.width, obs.y);
-        ctx.quadraticCurveTo(obs.x + obs.width/2, obs.y + 10, obs.x, obs.y);
+        ctx.quadraticCurveTo(obs.x + obs.width/2, obs.y - wingHeight, obs.x + obs.width, obs.y);
+        ctx.quadraticCurveTo(obs.x + obs.width/2, obs.y + wingHeight, obs.x, obs.y);
         ctx.fill();
       } else {
         ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
@@ -1924,12 +1945,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
         ctx.fillText("WIND", cx, cy + 36);
     }
 
-    // --- HUD: ACTIVE POWER-UPS INDICATORS ---
+    // --- HUD: ACTIVE POWER-UPS INDICATORS ---  SCALED AND BIGGER
     if (activePowerUpsRef.current.length > 0) {
-      const startX = 10;
-      const startY = 10;
-      const boxSize = 50;
-      const spacing = 10;
+      const boxSize = 80 * scale; // MUCH BIGGER - scaled to screen
+      const spacing = 12 * scale;
+      const startX = 10 * scale;
+      const startY = 10 * scale;
 
       activePowerUpsRef.current.forEach((powerUp, index) => {
         const x = startX;
@@ -1960,42 +1981,68 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
             break;
         }
 
-        // Background box
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        // Pulsing glow effect
+        const pulse = Math.sin(frameCountRef.current * 0.1) * 0.3 + 0.7;
+        ctx.save();
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 15 * scale * pulse;
+
+        // Background box with gradient
+        const bgGradient = ctx.createLinearGradient(x, y, x, y + boxSize);
+        bgGradient.addColorStop(0, 'rgba(0, 0, 0, 0.9)');
+        bgGradient.addColorStop(1, 'rgba(0, 0, 0, 0.7)');
+        ctx.fillStyle = bgGradient;
         ctx.fillRect(x, y, boxSize, boxSize);
 
-        // Border with power-up color
+        // Border with power-up color - THICKER
         ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 4 * scale;
         ctx.strokeRect(x, y, boxSize, boxSize);
 
-        // Icon
-        ctx.font = 'bold 24px sans-serif';
+        // Icon - SCALED
+        ctx.font = `bold ${36 * scale}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(emoji, x + boxSize / 2, y + boxSize / 2 - 5);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(emoji, x + boxSize / 2, y + boxSize / 2 - 5 * scale);
+
+        ctx.restore();
 
         // Timer bar (if not shield)
         if (powerUp.timeLeft > 0) {
           const progress = powerUp.timeLeft / powerUp.duration;
-          const barHeight = 4;
+          const barHeight = 6 * scale; // THICKER bar
           const barY = y + boxSize - barHeight;
 
           // Background
           ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
           ctx.fillRect(x, barY, boxSize, barHeight);
 
-          // Progress
-          ctx.fillStyle = color;
+          // Progress with gradient
+          const barGradient = ctx.createLinearGradient(x, barY, x + boxSize, barY);
+          barGradient.addColorStop(0, color);
+          barGradient.addColorStop(1, color + 'aa'); // Slightly transparent at end
+          ctx.fillStyle = barGradient;
           ctx.fillRect(x, barY, boxSize * progress, barHeight);
+
+          // Progress percentage text
+          const percentText = Math.ceil(progress * 100) + '%';
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `bold ${10 * scale}px sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(percentText, x + boxSize / 2, y + boxSize - barHeight / 2);
         }
 
-        // Name label (outside box)
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.font = 'bold 8px sans-serif';
+        // Name label (outside box) - SCALED
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.font = `bold ${11 * scale}px sans-serif`;
         ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText(name, x + boxSize + 5, y + boxSize / 2 - 4);
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4 * scale;
+        ctx.fillText(name, x + boxSize + 8 * scale, y + boxSize / 2);
+        ctx.shadowBlur = 0;
       });
     }
 
