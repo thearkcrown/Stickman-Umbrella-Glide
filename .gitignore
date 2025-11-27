@@ -7,3 +7,4 @@ dist
 !public/*.mp3
 .claude
 CLAUDE.md
+pnpm-lock.yaml
