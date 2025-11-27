@@ -147,21 +147,21 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       // Determine type of wind
       const typeRoll = Math.random();
       let vx = 0, vy = 0;
-      
-      // Scale wind force with difficulty
-      const forceMult = 1 + (difficulty * 1.5); // Up to 2.5x stronger at max difficulty
+
+      // Scale wind force with difficulty - NERFED: 1.3x max instead of 2.5x
+      const forceMult = 1 + (difficulty * 0.3); // Up to 1.3x stronger at max difficulty
 
       if (typeRoll < 0.4) {
-          // Horizontal Crosswind (Left or Right)
-          vx = (Math.random() > 0.5 ? 1 : -1) * (2 + Math.random() * 3) * forceMult;
+          // Horizontal Crosswind (Left or Right) - REDUCED base force
+          vx = (Math.random() > 0.5 ? 1 : -1) * (1.5 + Math.random() * 2) * forceMult;
       } else if (typeRoll < 0.7) {
-          // Updraft (Slows fall / Lifts up)
+          // Updraft (Slows fall / Lifts up) - REDUCED strength
           // Negative VY pushes player up
-          vy = - (0.5 + Math.random() * 0.8) * forceMult; 
+          vy = - (0.3 + Math.random() * 0.5) * forceMult;
       } else {
-          // Downdraft (Speeds fall)
+          // Downdraft (Speeds fall) - REDUCED strength
           // Positive VY pushes player down
-          vy = (0.5 + Math.random() * 0.5) * forceMult;
+          vy = (0.3 + Math.random() * 0.4) * forceMult;
       }
 
       windZonesRef.current.push({ id, x, y, width, height, vx, vy });
@@ -301,9 +301,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     if (gameState !== GameState.PLAYING || isPaused) return;
 
     // --- DIFFICULTY CALCULATION ---
-    // Scales from 0 to 1 over 5000 score units (was 8000, now faster ramp up)
+    // Scales from 0 to 1 over 8000 score units - REBALANCED for more gradual progression
     const currentScore = scoreRef.current;
-    const difficulty = Math.min(Math.max(0, currentScore - 200) / 5000, 1);
+    const difficulty = Math.min(Math.max(0, currentScore - 200) / 8000, 1);
 
     // Difficulty mode multiplier
     let modeMultiplier = 1;
@@ -318,17 +318,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       stormModeMultiplier = 2.0; // 2x obstacles
     }
 
-    // Dynamic Spawn Rates
-    const obstacleSpawnRate = Math.floor(Math.max(20, 60 - (difficulty * 35 * modeMultiplier * stormModeMultiplier))); // 60 -> 25 frames
-    const windZoneSpawnRate = Math.floor(Math.max(80, 240 - (difficulty * 160 * modeMultiplier * stormModeMultiplier))); // 240 -> 80 frames
-    const gustProbability = 0.001 + (difficulty * 0.008 * modeMultiplier) + (isStormMode ? 0.01 : 0); // More gusts in storm mode
+    // Dynamic Spawn Rates - NERFED for less spam
+    const obstacleSpawnRate = Math.floor(Math.max(35, 80 - (difficulty * 30 * modeMultiplier * stormModeMultiplier))); // 80 -> 35 frames (was 60 -> 25)
+    const windZoneSpawnRate = Math.floor(Math.max(120, 300 - (difficulty * 140 * modeMultiplier * stormModeMultiplier))); // 300 -> 120 frames (was 240 -> 80)
+    const gustProbability = 0.0005 + (difficulty * 0.004 * modeMultiplier) + (isStormMode ? 0.005 : 0); // HALVED gust frequency
 
     // Check active power-ups
     const hasSlowMotion = activePowerUpsRef.current.some(p => p.type === 'SLOW_MOTION');
     const hasWindBreaker = activePowerUpsRef.current.some(p => p.type === 'WIND_BREAKER');
     const hasSuperGlide = activePowerUpsRef.current.some(p => p.type === 'SUPER_GLIDE');
 
-    // World Speed Scaling (1.0x -> 2.0x)
+    // World Speed Scaling (1.0x -> 2.0x) - UNCHANGED, but with slower difficulty ramp it's more manageable
     let worldSpeedMultiplier = 1.0 + (difficulty * (WORLD_SPEED_MULTIPLIER_MAX - 1.0) * modeMultiplier);
 
     // Apply Slow Motion power-up (50% speed)
@@ -336,8 +336,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       worldSpeedMultiplier *= 0.5;
     }
 
-    // Gravity Scaling (makes player fall faster at higher difficulties)
-    const gravityMultiplier = 1.0 + (difficulty * 0.8 * modeMultiplier); // Up to 1.8x gravity
+    // Gravity Scaling - NERFED from 1.8x to 1.4x max
+    const gravityMultiplier = 1.0 + (difficulty * 0.4 * modeMultiplier); // Up to 1.4x gravity (was 1.8x)
 
     // Score Multiplier (rewards increase with difficulty)
     let scoreMultiplier = 1.0 + (difficulty * 1.5); // Up to 2.5x scoring
