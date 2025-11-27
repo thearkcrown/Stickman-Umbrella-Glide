@@ -172,8 +172,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
   const spawnObstacle = (canvasWidth: number, canvasHeight: number, difficulty: number) => {
     const typeRoll = Math.random();
     let type: Obstacle['type'] = 'CLOUD';
-    let width = 180; // Was 100, now MUCH bigger
-    let height = 100; // Was 60, now MUCH bigger
+    let width = 350; // GIANT - was 100 originally, now 3.5x bigger
+    let height = 200; // GIANT - was 60 originally, now 3.3x bigger
     let y = canvasHeight + 100;
     let x = Math.random() * (canvasWidth - width);
     let speedX = 0;
@@ -183,18 +183,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
 
     if (typeRoll < 0.4) {
       type = 'BIRD';
-      width = 70; // Was 40, now much bigger
-      height = 40; // Was 20, now 2x bigger
+      width = 120; // GIANT - was 40 originally, now 3x bigger
+      height = 70; // GIANT - was 20 originally, now 3.5x bigger
       speedX = (Math.random() - 0.5) * 4 * speedMult; // Moves faster horizontally
     } else if (typeRoll < 0.6) {
       type = 'BALLOON';
-      width = 60; // Was 30, now 2x bigger
-      height = 80; // Was 40, now 2x bigger
+      width = 100; // GIANT - was 30 originally, now 3.3x bigger
+      height = 150; // GIANT - was 40 originally, now 3.75x bigger
       speedX = 0;
     } else if (typeRoll < 0.8 && scoreRef.current > 500) {
       type = 'BUILDING';
-      width = 200 + Math.random() * 150; // Was 150-250, now 200-350
-      height = 500; // Was 400, now taller
+      width = 300 + Math.random() * 200; // GIANT - 300-500 width
+      height = 700; // GIANT - was 400, now way taller
       x = Math.random() > 0.5 ? 0 : canvasWidth - width; // Snap to sides
       y = canvasHeight + height;
     }
@@ -476,8 +476,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
     const responsiveness = player.isUmbrellaOpen ? 0.08 : 0.15; // Was 0.05/0.12, now 0.08/0.15
     let moveSpeed = dx * responsiveness;
 
-    // Clamp max lateral speed - INCREASED for better mobility
-    const MAX_LATERAL_SPEED = 25; // Was 20, now 25
+    // Clamp max lateral speed - REDUCED for more controlled movement
+    const MAX_LATERAL_SPEED = 12; // Was 25, now much slower for precision
     if (moveSpeed > MAX_LATERAL_SPEED) moveSpeed = MAX_LATERAL_SPEED;
     if (moveSpeed < -MAX_LATERAL_SPEED) moveSpeed = -MAX_LATERAL_SPEED;
     
@@ -1306,16 +1306,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({
       ctx.fillStyle = obs.type === 'BUILDING' ? '#374151' : obs.type === 'BIRD' ? '#ef4444' : '#f3f4f6';
       
       if (obs.type === 'CLOUD') {
+        // Draw cloud that scales with width/height
+        const cloudScale = obs.width / 100; // Scale based on original 100 width
         ctx.beginPath();
-        ctx.arc(obs.x + 20, obs.y + 20, 20, 0, Math.PI * 2);
-        ctx.arc(obs.x + 50, obs.y + 10, 30, 0, Math.PI * 2);
-        ctx.arc(obs.x + 80, obs.y + 20, 20, 0, Math.PI * 2);
+        ctx.arc(obs.x + 20 * cloudScale, obs.y + 20 * cloudScale, 20 * cloudScale, 0, Math.PI * 2);
+        ctx.arc(obs.x + 50 * cloudScale, obs.y + 10 * cloudScale, 30 * cloudScale, 0, Math.PI * 2);
+        ctx.arc(obs.x + 80 * cloudScale, obs.y + 20 * cloudScale, 20 * cloudScale, 0, Math.PI * 2);
         ctx.fill();
       } else if (obs.type === 'BIRD') {
+        // Draw bird that properly scales with width/height
+        const wingHeight = obs.height / 2; // Wing curve scales with height
         ctx.beginPath();
         ctx.moveTo(obs.x, obs.y);
-        ctx.quadraticCurveTo(obs.x + obs.width/2, obs.y - 10, obs.x + obs.width, obs.y);
-        ctx.quadraticCurveTo(obs.x + obs.width/2, obs.y + 10, obs.x, obs.y);
+        ctx.quadraticCurveTo(obs.x + obs.width/2, obs.y - wingHeight, obs.x + obs.width, obs.y);
+        ctx.quadraticCurveTo(obs.x + obs.width/2, obs.y + wingHeight, obs.x, obs.y);
         ctx.fill();
       } else {
         ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
